@@ -131,14 +131,26 @@ class FilterService {
         }
 
         // Forward via WhatsApp
-        if (process.env.FORWARD_ENABLE_WHATSAPP === 'true' && actions.forwardTo && actions.forwardTo.length > 0) {
-          for (const phone of actions.forwardTo) {
-            try {
-              await whatsappService.forwardText(message, phone);
-              console.log(`📤 Forwarded via WhatsApp to ${phone}`);
-            } catch (fwdErr) {
-              console.error('Error forwarding via WhatsApp:', fwdErr?.response?.data || fwdErr.message);
+        if (process.env.FORWARD_ENABLE_WHATSAPP === 'true') {
+          try {
+            // Se la chat separata è abilitata, invia lì
+            if (process.env.FORWARD_SEPARATE_CHAT === 'true') {
+              await whatsappService.sendToSeparateChat(message, result.filterName);
+              console.log(`📤 Sent to separate chat via filter: ${result.filterName}`);
+            } 
+            // Altrimenti usa il sistema legacy di forwardTo
+            else if (actions.forwardTo && actions.forwardTo.length > 0) {
+              for (const phone of actions.forwardTo) {
+                try {
+                  await whatsappService.forwardText(message, phone);
+                  console.log(`📤 Forwarded via WhatsApp to ${phone}`);
+                } catch (fwdErr) {
+                  console.error('Error forwarding via WhatsApp:', fwdErr?.response?.data || fwdErr.message);
+                }
+              }
             }
+          } catch (fwdErr) {
+            console.error('Error forwarding via WhatsApp:', fwdErr?.response?.data || fwdErr.message);
           }
         }
 

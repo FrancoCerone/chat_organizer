@@ -3,6 +3,7 @@ const router = express.Router();
 const Message = require('../models/Message');
 const Filter = require('../models/Filter');
 const { FilterService } = require('../services/filterService');
+const whatsappService = require('../services/whatsappService');
 
 // ===== MESSAGGI =====
 
@@ -308,6 +309,108 @@ router.get('/search', async (req, res) => {
   } catch (error) {
     console.error('Error searching messages:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ===== WHATSAPP =====
+
+// Verifica stato del token WhatsApp
+router.get('/whatsapp/token-status', async (req, res) => {
+  try {
+    const validation = await whatsappService.validateToken();
+    res.json({
+      valid: validation.valid,
+      error: validation.error || null,
+      data: validation.data || null
+    });
+  } catch (error) {
+    console.error('Error checking token status:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Refresh manuale del token WhatsApp
+router.post('/whatsapp/refresh-token', async (req, res) => {
+  try {
+    const newToken = await whatsappService.refreshAccessToken();
+    res.json({
+      success: true,
+      message: 'Token refreshed successfully',
+      newToken: newToken.substring(0, 10) + '...' // Mostra solo i primi 10 caratteri per sicurezza
+    });
+  } catch (error) {
+    console.error('Error refreshing token:', error);
+    res.status(500).json({ 
+      error: 'Failed to refresh token',
+      details: error.message 
+    });
+  }
+});
+
+// Test invio messaggio WhatsApp
+router.post('/whatsapp/test', async (req, res) => {
+  try {
+    const { to, message } = req.body;
+    
+    if (!to || !message) {
+      return res.status(400).json({ 
+        error: 'Phone number and message are required' 
+      });
+    }
+
+    const result = await whatsappService.sendText(to, message);
+    res.json({
+      success: true,
+      message: 'Test message sent successfully',
+      result: result
+    });
+  } catch (error) {
+    console.error('Error sending test message:', error);
+    res.status(500).json({ 
+      error: 'Failed to send test message',
+      details: error.message 
+    });
+  }
+});
+
+// Test invio nella chat separata
+router.post('/whatsapp/test-separate-chat', async (req, res) => {
+  try {
+    const { message, filterName } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ 
+        error: 'Message is required' 
+      });
+    }
+
+    // Crea un messaggio di test
+    const testMessage = {
+      content: { text: message },
+      from: { 
+        name: 'Test User', 
+        phoneNumber: '+393471234567' 
+      },
+      timestamp: new Date().toISOString(),
+      metadata: {
+        priority: 'normal',
+        tags: ['test'],
+        isImportant: false
+      }
+    };
+
+    const result = await whatsappService.sendToSeparateChat(testMessage, filterName || 'Test Filter');
+    res.json({
+      success: true,
+      message: 'Test message sent to separate chat successfully',
+      result: result
+    });
+  } catch (error) {
+    console.error('Error sending test message to separate chat:', error);
+    res.status(500).json({ 
+      error: 'Failed to send test message to separate chat',
+      details: error.message 
+    });
   }
 });
 
