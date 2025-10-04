@@ -71,7 +71,9 @@ async function processMessage(messageData, webhookData) {
     
     if (filterResults.length > 0) {
       console.log(`🔍 Message matched ${filterResults.length} filters`);
-      
+    else{
+        console.log(`❌ NOT Message matched filters`);
+    }
       // Esegui azioni dei filtri
       await FilterService.executeFilterActions(message, filterResults);
       
