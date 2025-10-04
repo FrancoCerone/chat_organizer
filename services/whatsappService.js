@@ -101,67 +101,63 @@ class WhatsappService {
     }
   }
 
-  async forwardText(originalMessage, toPhoneNumber) {
-    const text = originalMessage.content?.text || '[messaggio senza testo]';
-    const header = originalMessage.from?.name
-      ? `Inoltrato da ${originalMessage.from.name} (${originalMessage.from.phoneNumber})\n\n`
-      : `Inoltrato da ${originalMessage.from.phoneNumber}\n\n`;
-
-    const body = `${header}${text}`;
-    return this.sendText(toPhoneNumber, body);
-  }
-
-  // Invia messaggio nella chat separata con formattazione migliorata
-  // Invia messaggio in una chat o gruppo con formattazione migliorata
-  async sendToSeparateChat(originalMessage, filterName = 'Filtro', targetChatName = null) {
-    const defaultNumber = process.env.FORWARD_SEPARATE_CHAT_NUMBER;
-
-    if (!defaultNumber) {
-      throw new Error('FORWARD_SEPARATE_CHAT_NUMBER non configurato');
-    }
-
-    // ✅ Se è specificato un nome di gruppo, cerca il gruppo
-    let destinationId;
-    if (targetChatName) {
-      // Cerca il gruppo tra le chat esistenti (puoi implementare getChatByName)
-      const groupChat = await this.getChatByName(targetChatName);
-      if (!groupChat) {
-        throw new Error(`Nessun gruppo trovato con nome "${targetChatName}"`);
-      }
-      destinationId = groupChat.id._serialized;
-    } else {
-      // Altrimenti manda al numero predefinito
-      destinationId = defaultNumber;
-    }
-
+  // Builder centralizzato per messaggi inoltrati
+  buildForwardMessage(originalMessage, filterName = null) {
     const text = originalMessage.content?.text || '[messaggio senza testo]';
     const timestamp = new Date(originalMessage.timestamp).toLocaleString('it-IT');
 
-    // Header con informazioni
-    const filterHeader = `🔍 **${filterName}**\n`;
-    const senderInfo = originalMessage.from?.name
+    // Se è specificato un filtro, usa formattazione ricca
+    if (filterName) {
+      // Header con informazioni del filtro
+      const filterHeader = `🔍 **${filterName}**\n`;
+      const senderInfo = originalMessage.from?.name
         ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
         : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
-    const timeInfo = `⏰ **Quando:** ${timestamp}\n`;
-    const separator = `${'─'.repeat(30)}\n\n`;
+      const timeInfo = `⏰ **Quando:** ${timestamp}\n`;
+      const separator = `${'─'.repeat(30)}\n\n`;
+      
+      // Contenuto del messaggio
+      const messageContent = `💬 **Messaggio:**\n${text}`;
+      
+      // Footer con metadati se disponibili
+      let footer = '';
+      if (originalMessage.metadata?.priority) {
+        footer += `\n\n🏷️ **Priorità:** ${originalMessage.metadata.priority}`;
+      }
+      if (originalMessage.metadata?.tags && originalMessage.metadata.tags.length > 0) {
+        footer += `\n🏷️ **Tag:** ${originalMessage.metadata.tags.join(', ')}`;
+      }
+      if (originalMessage.metadata?.isImportant) {
+        footer += `\n⭐ **IMPORTANTE**`;
+      }
 
-    const messageContent = `💬 **Messaggio:**\n${text}`;
+      return `${filterHeader}${senderInfo}${timeInfo}${separator}${messageContent}${footer}`;
+    } else {
+      // Formattazione semplice per forward legacy
+      const header = originalMessage.from?.name
+        ? `Inoltrato da ${originalMessage.from.name} (${originalMessage.from.phoneNumber})\n\n`
+        : `Inoltrato da ${originalMessage.from.phoneNumber}\n\n`;
 
-    // Footer opzionale
-    let footer = '';
-    if (originalMessage.metadata?.priority) {
-      footer += `\n\n🏷️ **Priorità:** ${originalMessage.metadata.priority}`;
+      return `${header}${text}`;
     }
-    if (originalMessage.metadata?.tags?.length) {
-      footer += `\n🏷️ **Tag:** ${originalMessage.metadata.tags.join(', ')}`;
-    }
-    if (originalMessage.metadata?.isImportant) {
-      footer += `\n⭐ **IMPORTANTE**`;
+  }
+
+  async forwardText(originalMessage, toPhoneNumber, filterName = null) {
+    const messageBody = this.buildForwardMessage(originalMessage, filterName);
+    return this.sendText(toPhoneNumber, messageBody);
+  }
+
+  // Invia messaggio nella chat separata con formattazione migliorata
+  async sendToSeparateChat(originalMessage, filterName = 'Filtro') {
+    const separateChatNumber = process.env.FORWARD_SEPARATE_CHAT_NUMBER;
+    
+    if (!separateChatNumber) {
+      throw new Error('FORWARD_SEPARATE_CHAT_NUMBER non configurato');
     }
 
-    const fullMessage = `${filterHeader}${senderInfo}${timeInfo}${separator}${messageContent}${footer}`;
-
-    return this.sendText(destinationId, fullMessage);
+    console.log(`📤 Invio messaggio filtrato a ${separateChatNumber}`);
+    
+    return this.forwardText(originalMessage, separateChatNumber, filterName);
   }
 
   // Metodo per verificare la validità del token
@@ -188,7 +184,3 @@ class WhatsappService {
 }
 
 module.exports = new WhatsappService();
-
-
-
-

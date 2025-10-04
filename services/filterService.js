@@ -138,11 +138,11 @@ class FilterService {
               await whatsappService.sendToSeparateChat(message, result.filterName);
               console.log(`📤 Sent to separate chat via filter: ${result.filterName}`);
             } 
-            // Altrimenti usa il sistema legacy di forwardTo
-            else if (actions.forwardTo && actions.forwardTo.length > 0) {
+            // Altrimenti usa il sistema legacy di forwardTo (senza duplicare se chat separata è attiva)
+            if (actions.forwardTo && actions.forwardTo.length > 0) {
               for (const phone of actions.forwardTo) {
                 try {
-                  await whatsappService.forwardText(message, phone);
+                  await whatsappService.forwardText(message, phone, result.filterName);
                   console.log(`📤 Forwarded via WhatsApp to ${phone}`);
                 } catch (fwdErr) {
                   console.error('Error forwarding via WhatsApp:', fwdErr?.response?.data || fwdErr.message);
@@ -227,39 +227,85 @@ class FilterService {
 // Setup filtri predefiniti
 const setupFilters = async () => {
   try {
-    const defaultFilters = [
-      {
-        name: 'Messaggi Urgenti',
-        description: 'Filtra messaggi con parole chiave urgenti',
-        keywords: ['urgente', 'emergenza', 'asap', 'subito'],
-        actions: {
-          markAsImportant: true,
-          setPriority: 'urgent',
-          addTags: ['urgente']
-        }
-      },
-      {
-        name: 'Messaggi di Lavoro',
-        description: 'Filtra messaggi durante orario lavorativo',
-        timeRange: {
-          start: '09:00',
-          end: '18:00',
-          days: [1, 2, 3, 4, 5] // Lun-Ven
-        },
-        actions: {
-          addTags: ['lavoro'],
-          forwardTo: ['+393476835437']
-        }
+    let defaultFilters = [];
+    
+    // Leggi i filtri predefiniti dal file .env se disponibili
+    if (process.env.DEFAULT_FILTERS) {
+      try {
+        defaultFilters = JSON.parse(process.env.DEFAULT_FILTERS);
+        console.log(`📋 Caricati ${defaultFilters.length} filtri predefiniti dal file .env`);
+      } catch (parseError) {
+        console.error('❌ Errore nel parsing DEFAULT_FILTERS dal .env:', parseError.message);
+        console.log('🔄 Usando filtri predefiniti hardcoded...');
+        
+        // Fallback ai filtri hardcoded se il parsing fallisce
+        defaultFilters = [
+          {
+            name: 'Messaggi Urgenti',
+            description: 'Filtra messaggi con parole chiave urgenti',
+            keywords: ['urgente', 'emergenza', 'asap', 'subito'],
+            actions: {
+              markAsImportant: true,
+              setPriority: 'urgent',
+              addTags: ['urgente']
+            }
+          },
+          {
+            name: 'Messaggi di Lavoro',
+            description: 'Filtra messaggi durante orario lavorativo',
+            timeRange: {
+              start: '09:00',
+              end: '18:00',
+              days: [1, 2, 3, 4, 5] // Lun-Ven
+            },
+            actions: {
+              addTags: ['lavoro']
+            }
+          }
+        ];
       }
-    ];
+    } else {
+      console.log('⚠️ DEFAULT_FILTERS non configurato nel .env, usando filtri predefiniti hardcoded');
+      
+      // Filtri predefiniti hardcoded
+      defaultFilters = [
+        {
+          name: 'Messaggi Urgenti',
+          description: 'Filtra messaggi con parole chiave urgenti',
+          keywords: ['urgente', 'emergenza', 'asap', 'subito'],
+          actions: {
+            markAsImportant: true,
+            setPriority: 'urgent',
+            addTags: ['urgente']
+          }
+        },
+        {
+          name: 'Messaggi di Lavoro',
+          description: 'Filtra messaggi durante orario lavorativo',
+          timeRange: {
+            start: '09:00',
+            end: '18:00',
+            days: [1, 2, 3, 4, 5] // Lun-Ven
+          },
+          actions: {
+            addTags: ['lavoro']
+          }
+        }
+      ];
+    }
 
+    // Crea i filtri se non esistono
     for (const filterData of defaultFilters) {
       const existingFilter = await Filter.findOne({ name: filterData.name });
       if (!existingFilter) {
         await new Filter(filterData).save();
         console.log(`✅ Created default filter: ${filterData.name}`);
+      } else {
+        console.log(`ℹ️ Filter already exists: ${filterData.name}`);
       }
     }
+    
+    console.log(`🎯 Setup completato per ${defaultFilters.length} filtri predefiniti`);
   } catch (error) {
     console.error('Error setting up default filters:', error);
   }

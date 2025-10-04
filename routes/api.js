@@ -414,6 +414,122 @@ router.post('/whatsapp/test-separate-chat', async (req, res) => {
   }
 });
 
+// Configurazione chat separata
+router.get('/whatsapp/config', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      config: {
+        separateChatEnabled: process.env.FORWARD_SEPARATE_CHAT === 'true',
+        separateChatNumber: process.env.FORWARD_SEPARATE_CHAT_NUMBER,
+        whatsappEnabled: process.env.FORWARD_ENABLE_WHATSAPP === 'true'
+      }
+    });
+  } catch (error) {
+    console.error('Error checking config:', error);
+    res.status(500).json({ 
+      error: 'Failed to check config',
+      details: error.message 
+    });
+  }
+});
+
+// Test message builder
+router.post('/whatsapp/test-message-builder', async (req, res) => {
+  try {
+    const { message, filterName, format } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ 
+        error: 'Message is required' 
+      });
+    }
+
+    // Crea un messaggio di test
+    const testMessage = {
+      content: { text: message },
+      from: { 
+        name: 'Test User', 
+        phoneNumber: '+393471234567' 
+      },
+      timestamp: new Date().toISOString(),
+      metadata: {
+        priority: 'urgent',
+        tags: ['test', 'urgente'],
+        isImportant: true
+      }
+    };
+
+    // Test del builder
+    const formattedMessage = whatsappService.buildForwardMessage(testMessage, filterName || 'Test Filter');
+    
+    res.json({
+      success: true,
+      message: 'Message builder test completed',
+      formattedMessage: formattedMessage,
+      originalMessage: testMessage
+    });
+  } catch (error) {
+    console.error('Error testing message builder:', error);
+    res.status(500).json({ 
+      error: 'Failed to test message builder',
+      details: error.message 
+    });
+  }
+});
+
+// Gestione filtri predefiniti
+router.get('/filters/default-config', async (req, res) => {
+  try {
+    const defaultFiltersConfig = process.env.DEFAULT_FILTERS;
+    
+    let parsedFilters = null;
+    if (defaultFiltersConfig) {
+      try {
+        parsedFilters = JSON.parse(defaultFiltersConfig);
+      } catch (parseError) {
+        console.error('Error parsing DEFAULT_FILTERS:', parseError.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      config: {
+        hasDefaultFilters: !!defaultFiltersConfig,
+        defaultFiltersCount: parsedFilters ? parsedFilters.length : 0,
+        defaultFilters: parsedFilters
+      }
+    });
+  } catch (error) {
+    console.error('Error getting default filters config:', error);
+    res.status(500).json({ 
+      error: 'Failed to get default filters config',
+      details: error.message 
+    });
+  }
+});
+
+// Reset filtri predefiniti
+router.post('/filters/reset-defaults', async (req, res) => {
+  try {
+    // Importa setupFilters dinamicamente
+    const { setupFilters } = require('../services/filterService');
+    
+    await setupFilters();
+    
+    res.json({
+      success: true,
+      message: 'Default filters reset successfully'
+    });
+  } catch (error) {
+    console.error('Error resetting default filters:', error);
+    res.status(500).json({ 
+      error: 'Failed to reset default filters',
+      details: error.message 
+    });
+  }
+});
+
 module.exports = router;
 
 
