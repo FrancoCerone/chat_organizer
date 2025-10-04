@@ -2,6 +2,7 @@ const Filter = require('../models/Filter');
 const Message = require('../models/Message');
 const moment = require('moment');
 const whatsappService = require('./whatsappService');
+const MessageConverter = require('./messageConverter');
 
 class FilterService {
   constructor() {
@@ -114,16 +115,27 @@ class FilterService {
         // Aggiungi tag
         if (actions.addTags && actions.addTags.length > 0) {
           for (const tag of actions.addTags) {
-            await message.addTag(tag);
+            //await message.addTag(tag);
           }
         }
 
         // Archivia
         if (actions.archive) {
           message.status = 'archived';
+          MessageConverter.markAsModified(message);
         }
 
-        await message.save();
+        // Salva il messaggio (Mongoose gestisce automaticamente le modifiche)
+        try {
+          await message.save();
+        } catch (error) {
+          // Se è un errore di salvataggio parallelo, ignora
+          if (error.name === 'ParallelSaveError') {
+            console.log('ℹ️ Messaggio già salvato, saltando salvataggio parallelo');
+          } else {
+            throw error;
+          }
+        }
         
         // Auto-reply (da implementare con WhatsApp API)
         if (actions.autoReply && actions.autoReply.enabled) {

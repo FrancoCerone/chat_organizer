@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Message = require('../models/Message');
 const { FilterService } = require('../services/filterService');
+const MessageConverter = require('../services/messageConverter');
 
 // Verifica webhook (GET)
 router.get('/', (req, res) => {
@@ -60,19 +61,32 @@ async function processMessage(messageData, webhookData) {
     // Estrai informazioni del messaggio
     const messageInfo = extractMessageInfo(messageData, webhookData);
     
+    // Converte il messaggio webhook nel formato standard
+    const standardMessage = MessageConverter.convertWebhookMessage(messageInfo);
+    
+    // Normalizza per il processing
+    const normalizedMessage = MessageConverter.normalizeMessage(standardMessage);
+    
+    // Valida il messaggio
+    if (!MessageConverter.validateMessage(normalizedMessage)) {
+      console.error('❌ Messaggio webhook non valido');
+      return;
+    }
+    
     // Salva messaggio nel database
-    const message = new Message(messageInfo);
+    const message = new Message(normalizedMessage);
     await message.save();
     
     console.log('💾 Message saved to database');
     
-    // Applica filtri
-    const filterResults = await FilterService.applyFilters(messageInfo);
+    // Applica filtri usando il sistema unificato
+    const filterResults = await FilterService.applyFilters(normalizedMessage);
     
     if (filterResults.length > 0) {
       console.log(`🔍 Message matched ${filterResults.length} filters`);
 
-      // Esegui azioni dei filtri
+      // Esegui azioni dei filtri usando il sistema unificato
+      // Passa l'oggetto Message del database per compatibilità
       await FilterService.executeFilterActions(message, filterResults);
       
       // Aggiorna stato messaggio

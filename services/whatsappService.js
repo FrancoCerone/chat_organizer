@@ -112,9 +112,21 @@ class WhatsappService {
       const filterHeader = `🚨 FILTRO ATTIVATO: **${filterName}**\n`;
       const separator = `${'═'.repeat(35)}\n`;
       
-      const senderInfo = originalMessage.from?.name
-        ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
-        : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
+      // Informazioni mittente
+      let senderInfo = '';
+      if (originalMessage.metadata?.groupInfo) {
+        // Messaggio da gruppo
+        senderInfo = `👥 **Gruppo:** ${originalMessage.metadata.groupInfo.name}\n`;
+        senderInfo += originalMessage.from?.name
+          ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
+          : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
+      } else {
+        // Messaggio privato
+        senderInfo = originalMessage.from?.name
+          ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
+          : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
+      }
+      
       const timeInfo = `⏰ **Quando:** ${timestamp}\n`;
       const messageSeparator = `${'─'.repeat(30)}\n\n`;
       

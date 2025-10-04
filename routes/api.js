@@ -4,6 +4,7 @@ const Message = require('../models/Message');
 const Filter = require('../models/Filter');
 const { FilterService } = require('../services/filterService');
 const whatsappService = require('../services/whatsappService');
+const whatsappWebService = require('../services/whatsappWebService');
 
 // ===== MESSAGGI =====
 
@@ -517,6 +518,118 @@ router.post('/filters/reset-defaults', async (req, res) => {
     console.error('Error resetting default filters:', error);
     res.status(500).json({ 
       error: 'Failed to reset default filters',
+      details: error.message 
+    });
+  }
+});
+
+// ===== WHATSAPP WEB =====
+
+// Stato WhatsApp Web
+router.get('/whatsapp-web/status', async (req, res) => {
+  try {
+    const status = whatsappWebService.getStatus();
+    res.json({
+      success: true,
+      status: status
+    });
+  } catch (error) {
+    console.error('Error getting WhatsApp Web status:', error);
+    res.status(500).json({ 
+      error: 'Failed to get WhatsApp Web status',
+      details: error.message 
+    });
+  }
+});
+
+// Lista gruppi WhatsApp
+router.get('/whatsapp-web/groups', async (req, res) => {
+  try {
+    const groups = await whatsappWebService.getGroupsInfo();
+    res.json({
+      success: true,
+      groups: groups
+    });
+  } catch (error) {
+    console.error('Error getting WhatsApp groups:', error);
+    res.status(500).json({ 
+      error: 'Failed to get WhatsApp groups',
+      details: error.message 
+    });
+  }
+});
+
+// Invia messaggio a gruppo
+router.post('/whatsapp-web/send-to-group', async (req, res) => {
+  try {
+    const { groupName, message } = req.body;
+    
+    if (!groupName || !message) {
+      return res.status(400).json({ 
+        error: 'Group name and message are required' 
+      });
+    }
+
+    await whatsappWebService.sendMessageToGroup(groupName, message);
+    
+    res.json({
+      success: true,
+      message: `Message sent to group "${groupName}" successfully`
+    });
+  } catch (error) {
+    console.error('Error sending message to group:', error);
+    res.status(500).json({ 
+      error: 'Failed to send message to group',
+      details: error.message 
+    });
+  }
+});
+
+// Test messaggio da gruppo
+router.post('/whatsapp-web/test-group-message', async (req, res) => {
+  try {
+    const { groupName, senderName, message, filterName } = req.body;
+    
+    if (!groupName || !message) {
+      return res.status(400).json({ 
+        error: 'Group name and message are required' 
+      });
+    }
+
+    // Crea un messaggio di test simulato da gruppo
+    const testMessage = {
+      messageId: 'test_' + Date.now(),
+      from: { 
+        name: senderName || 'Test User', 
+        phoneNumber: '+393471234567' 
+      },
+      content: { 
+        type: 'text',
+        text: message 
+      },
+      timestamp: new Date().toISOString(),
+      metadata: {
+        source: 'whatsapp-web',
+        groupInfo: {
+          name: groupName,
+          id: 'test_group_id'
+        }
+      }
+    };
+
+    // Test del builder
+    const formattedMessage = whatsappService.buildForwardMessage(testMessage, filterName || 'Test Filter');
+    
+    res.json({
+      success: true,
+      message: 'Group message test completed',
+      formattedMessage: formattedMessage,
+      originalMessage: testMessage
+    });
+  } catch (error) {
+    console.error('Error testing group message:', error);
+    res.status(500).json({ 
+      error: 'Failed to test group message',
       details: error.message 
     });
   }

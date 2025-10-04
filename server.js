@@ -9,6 +9,7 @@ const webhookRoutes = require('./routes/webhook');
 const apiRoutes = require('./routes/api');
 const { connectDB } = require('./config/database');
 const { setupFilters } = require('./services/filterService');
+const whatsappWebService = require('./services/whatsappWebService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -25,6 +26,9 @@ connectDB();
 
 // Setup filtri predefiniti
 setupFilters();
+
+// Inizializza WhatsApp Web.js per gruppi
+whatsappWebService.initialize();
 
 // Routes
 app.use('/webhook', webhookRoutes);
