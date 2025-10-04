@@ -22,7 +22,7 @@ class FilterService {
   // Applica tutti i filtri a un messaggio
   async applyFilters(messageData) {
     const results = [];
-    
+    await this.loadFilters()
     for (const filter of this.filters) {
       const match = await this.checkFilterMatch(messageData, filter);
       if (match) {

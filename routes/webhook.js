@@ -83,8 +83,7 @@ async function processMessage(messageData, webhookData) {
     }
     
     console.log('✅ Message processing completed');
-    console.log(`❌ NOT Message matched filters`);
-    
+
   } catch (error) {
     console.error('❌ Error processing message:', error);
   }
