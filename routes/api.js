@@ -392,11 +392,7 @@ router.post('/whatsapp/test-separate-chat', async (req, res) => {
         phoneNumber: '+393471234567' 
       },
       timestamp: new Date().toISOString(),
-      metadata: {
-        priority: 'normal',
-        tags: ['test'],
-        isImportant: false
-      }
+      metadata: {}
     };
 
     const result = await whatsappService.sendToSeparateChat(testMessage, filterName || 'Test Filter');
@@ -453,11 +449,7 @@ router.post('/whatsapp/test-message-builder', async (req, res) => {
         phoneNumber: '+393471234567' 
       },
       timestamp: new Date().toISOString(),
-      metadata: {
-        priority: 'urgent',
-        tags: ['test', 'urgente'],
-        isImportant: true
-      }
+      metadata: {}
     };
 
     // Test del builder

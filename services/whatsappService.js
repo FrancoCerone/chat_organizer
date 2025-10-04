@@ -108,30 +108,20 @@ class WhatsappService {
 
     // Se è specificato un filtro, usa formattazione ricca
     if (filterName) {
-      // Header con informazioni del filtro
-      const filterHeader = `🔍 **${filterName}**\n`;
+      // Header con nome del filtro più prominente
+      const filterHeader = `🚨 FILTRO ATTIVATO: **${filterName}**\n`;
+      const separator = `${'═'.repeat(35)}\n`;
+      
       const senderInfo = originalMessage.from?.name
         ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
         : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
       const timeInfo = `⏰ **Quando:** ${timestamp}\n`;
-      const separator = `${'─'.repeat(30)}\n\n`;
+      const messageSeparator = `${'─'.repeat(30)}\n\n`;
       
       // Contenuto del messaggio
       const messageContent = `💬 **Messaggio:**\n${text}`;
-      
-      // Footer con metadati se disponibili
-      let footer = '';
-      if (originalMessage.metadata?.priority) {
-        footer += `\n\n🏷️ **Priorità:** ${originalMessage.metadata.priority}`;
-      }
-      if (originalMessage.metadata?.tags && originalMessage.metadata.tags.length > 0) {
-        footer += `\n🏷️ **Tag:** ${originalMessage.metadata.tags.join(', ')}`;
-      }
-      if (originalMessage.metadata?.isImportant) {
-        footer += `\n⭐ **IMPORTANTE**`;
-      }
 
-      return `${filterHeader}${senderInfo}${timeInfo}${separator}${messageContent}${footer}`;
+      return `${filterHeader}${separator}${senderInfo}${timeInfo}${messageSeparator}${messageContent}`;
     } else {
       // Formattazione semplice per forward legacy
       const header = originalMessage.from?.name
