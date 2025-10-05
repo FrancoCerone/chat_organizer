@@ -160,13 +160,8 @@ class WhatsappWebService {
       const isGroupMessage = message.
       from.includes('@g.us');
       
-      if (isGroupMessage) {
-        await this.handleGroupMessage(message);
-      } else {
-        // Messaggio privato - non gestito da questo servizio
-        return;
-      }
-      
+      await this.handleGroupMessage(message);
+
     } catch (error) {
       console.error('❌ Errore gestione messaggio:', error);
     }
@@ -183,7 +178,7 @@ class WhatsappWebService {
         return;
       }
 
-      console.log(`📨 Messaggio da gruppo "${chat.name}" da ${contact.name || contact.number}`);
+      console.log(`📨 Messaggio da "${chat.name}" da ${contact.name || contact.number}`);
 
       // Converte il messaggio nel formato standard
       const standardMessage = await this.convertToStandardMessage(message, chat, contact);
