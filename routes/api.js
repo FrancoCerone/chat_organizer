@@ -419,7 +419,7 @@ router.get('/whatsapp/config', async (req, res) => {
       config: {
         separateChatEnabled: process.env.FORWARD_SEPARATE_CHAT === 'true',
         separateChatNumber: process.env.FORWARD_SEPARATE_CHAT_NUMBER,
-        whatsappEnabled: process.env.FORWARD_ENABLE_WHATSAPP === 'true'
+        whatsappEnabled: process.env.FORWARD_ENABLE_WHATSAPP_CLOUD_API === 'true'
       }
     });
   } catch (error) {

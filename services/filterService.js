@@ -142,48 +142,18 @@ class FilterService {
           await this.sendAutoReply(message, actions.autoReply.message);
         }
 
-        // Forward via WhatsApp
-        if (process.env.FORWARD_ENABLE_WHATSAPP === 'true') {
-          try {
-            // Se la chat separata è abilitata, invia lì
-            if (process.env.FORWARD_SEPARATE_CHAT === 'true') {
-              await whatsappService.sendToSeparateChat(message, result.filterName);
-              console.log(`📤 Sent to separate chat via filter: ${result.filterName}`);
-            } 
-            // Altrimenti usa il sistema legacy di forwardTo (senza duplicare se chat separata è attiva)
-            if (actions.forwardTo && actions.forwardTo.length > 0) {
-              for (const phone of actions.forwardTo) {
-                try {
-                  await whatsappService.forwardText(message, phone, result.filterName);
-                  console.log(`📤 Forwarded via WhatsApp to ${phone}`);
-                } catch (fwdErr) {
-                  console.error('Error forwarding via WhatsApp:', fwdErr?.response?.data || fwdErr.message);
-                }
-              }
-            }
-          } catch (fwdErr) {
-            console.error('Error forwarding via WhatsApp:', fwdErr?.response?.data || fwdErr.message);
-          }
+        // Forward via WhatsApp Business
+        if (process.env.FORWARD_ENABLE_WHATSAPP_CLOUD_API === 'true') {
+          await this.manageForwardWithCloudApi(message, result, actions);
         }
 
-        // Forward via webhook esterno opzionale
-        if (process.env.FORWARD_ENABLE_WEBHOOK === 'true' && process.env.FORWARD_WEBHOOK_URL) {
-          try {
-            await whatsappService.postToWebhook(process.env.FORWARD_WEBHOOK_URL, {
-              type: 'forward',
-              originalMessage: {
-                id: message.messageId,
-                from: message.from,
-                content: message.content,
-                timestamp: message.timestamp
-              },
-              filtersMatched: filterResults.map(r => ({ id: r.filterId, name: r.filterName }))
-            });
-            console.log('🌐 Forwarded payload to external webhook');
-          } catch (whErr) {
-            console.error('Error forwarding to webhook:', whErr?.response?.data || whErr.message);
-          }
+        // Forward via WhatsAppWeb-ts
+        if (process.env.FORWARD_ENABLE_WHATSAPPWEBJS === 'true') {
+          // implmementami la stessa gesione ma cutilizzando l'invio tramite whatsappWbbService
+          await this.manageForwardWithWhatsappWebJs(message, result, actions);
         }
+
+
 
       } catch (error) {
         console.error('Error executing filter actions:', error);
@@ -191,7 +161,73 @@ class FilterService {
     }
   }
 
-  // Invia auto-reply
+  async manageForwardWithCloudApi(message, result, actions) {
+    try {
+      // Se la chat separata è abilitata, invia lì
+      if (process.env.FORWARD_SEPARATE_CHAT === 'true') {
+        await whatsappService.sendToSeparateChat(message, result.filterName);
+        console.log(`📤 Sent to separate chat via filter: ${result.filterName}`);
+      }
+      // Altrimenti usa il sistema legacy di forwardTo (senza duplicare se chat separata è attiva)
+      if (actions.forwardTo && actions.forwardTo.length > 0) {
+        for (const phone of actions.forwardTo) {
+          try {
+            await whatsappService.forwardText(message, phone,
+                result.filterName);
+            console.log(`📤 Forwarded via WhatsApp to ${phone}`);
+          } catch (fwdErr) {
+            console.error('Error forwarding via WhatsApp:',
+                fwdErr?.response?.data || fwdErr.message);
+          }
+        }
+      }
+    } catch (fwdErr) {
+      console.error('Error forwarding via WhatsApp:',
+          fwdErr?.response?.data || fwdErr.message);
+    }
+  }
+
+  async manageForwardWithWhatsappWebJs(message, result, actions, whatsappWebService = null) {
+    try {
+      // Se il servizio non è passato come parametro, prova a importarlo dinamicamente
+      if (!whatsappWebService) {
+        try {
+          whatsappWebService = require('./whatsappWebService');
+        } catch (importError) {
+          console.log('⚠️ Impossibile importare whatsappWebService:', importError.message);
+          return;
+        }
+      }
+
+      // Controlla se WhatsApp Web è autenticato
+      if (!whatsappWebService.isAuthenticated) {
+        console.log('⚠️ WhatsApp Web non autenticato, saltando forward via WhatsAppWeb');
+        return;
+      }
+
+      // Se la chat separata è abilitata, invia lì
+      if (process.env.FORWARD_SEPARATE_CHAT === 'true') {
+        await whatsappWebService.sendToSeparateChat(message, result.filterName);
+        console.log(`📤 Sent to separate chat via WhatsApp Web filter: ${result.filterName}`);
+      }
+      
+      // Altrimenti usa il sistema legacy di forwardTo (senza duplicare se chat separata è attiva)
+      if (actions.forwardTo && actions.forwardTo.length > 0) {
+        for (const phone of actions.forwardTo) {
+          try {
+            await whatsappWebService.forwardText(message, phone, result.filterName);
+            console.log(`📤 Forwarded via WhatsApp Web to ${phone}`);
+          } catch (fwdErr) {
+            console.error('Error forwarding via WhatsApp Web:', fwdErr.message);
+          }
+        }
+      }
+    } catch (fwdErr) {
+      console.error('Error forwarding via WhatsApp Web:', fwdErr.message);
+    }
+  }
+
+// Invia auto-reply
   async sendAutoReply(message, replyText) {
     // TODO: Implementare invio risposta automatica tramite WhatsApp API
     console.log(`📤 Auto-reply to ${message.from.phoneNumber}: ${replyText}`);

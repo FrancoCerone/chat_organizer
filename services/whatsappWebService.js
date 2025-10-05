@@ -1,9 +1,9 @@
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const whatsappService = require('./whatsappService');
-const { FilterService } = require('./filterService');
+const filterServiceModule = require('./filterService');
 const MessageConverter = require('./messageConverter');
 const Message = require('../models/Message');
+
 
 class WhatsappWebService {
   constructor() {
@@ -21,6 +21,44 @@ class WhatsappWebService {
     if (!groupsEnv) return [];
     
     return groupsEnv.split(',').map(group => group.trim()).filter(group => group.length > 0);
+  }
+
+  // Valida e formatta un numero di telefono per WhatsApp
+  formatPhoneNumber(phoneNumber) {
+    try {
+      // Converte in stringa se necessario
+      let phoneStr = phoneNumber;
+      if (typeof phoneNumber !== 'string') {
+        if (phoneNumber && phoneNumber.toString) {
+          phoneStr = phoneNumber.toString();
+        } else {
+          throw new Error(`Numero di telefono non valido: ${JSON.stringify(phoneNumber)}`);
+        }
+      }
+
+      // Pulisce il numero di telefono (rimuove spazi, caratteri speciali)
+      phoneStr = phoneStr.replace(/\s+/g, '').replace(/[^\d+]/g, '');
+      
+      // Se inizia con +, rimuove il +
+      if (phoneStr.startsWith('+')) {
+        phoneStr = phoneStr.substring(1);
+      }
+
+      // Verifica che contenga solo numeri
+      if (!/^\d+$/.test(phoneStr)) {
+        throw new Error(`Numero di telefono contiene caratteri non validi: ${phoneStr}`);
+      }
+
+      // Verifica lunghezza minima (almeno 7 cifre)
+      if (phoneStr.length < 7) {
+        throw new Error(`Numero di telefono troppo corto: ${phoneStr}`);
+      }
+
+      return phoneStr;
+    } catch (error) {
+      console.error('❌ Errore formattazione numero:', error.message);
+      throw error;
+    }
   }
 
   // Inizializza il client WhatsApp Web
@@ -193,6 +231,7 @@ class WhatsappWebService {
       console.log('💾 Messaggio da gruppo salvato nel database');
       
       // Applica i filtri usando il sistema unificato
+      const FilterService = filterServiceModule.FilterService;
       const filterResults = await FilterService.applyFilters(normalizedMessage);
       
       if (filterResults.length > 0) {
@@ -257,6 +296,91 @@ class WhatsappWebService {
       console.error('❌ Errore invio messaggio gruppo:', error);
       throw error;
     }
+  }
+
+  // Invia messaggio a un numero di telefono specifico
+  async sendMessageToNumber(phoneNumber, message) {
+    if (!this.isAuthenticated) {
+      throw new Error('WhatsApp Web non autenticato');
+    }
+
+    try {
+      // Formatta il numero di telefono usando la funzione dedicata
+      const cleanPhoneNumber = this.formatPhoneNumber(phoneNumber);
+      
+      // Formatta il numero di telefono per WhatsApp
+      const formattedNumber = cleanPhoneNumber.includes('@c.us') ? cleanPhoneNumber : `${cleanPhoneNumber}@c.us`;
+      
+      console.log(`📤 Tentativo invio messaggio a: ${formattedNumber}`);
+      await this.client.sendMessage(formattedNumber, message);
+      console.log(`✅ Messaggio inviato al numero "${cleanPhoneNumber}"`);
+      
+    } catch (error) {
+      console.error('❌ Errore invio messaggio al numero:', error);
+      throw error;
+    }
+  }
+
+  // Builder centralizzato per messaggi inoltrati (simile a whatsappService)
+  buildForwardMessage(originalMessage, filterName = null) {
+    const text = originalMessage.content?.text || '[messaggio senza testo]';
+    const timestamp = new Date(originalMessage.timestamp).toLocaleString('it-IT');
+
+    // Se è specificato un filtro, usa formattazione ricca
+    if (filterName) {
+      // Header con nome del filtro più prominente
+      const filterHeader = `🚨 FILTRO ATTIVATO: **${filterName}**\n`;
+      const separator = `${'═'.repeat(35)}\n`;
+      
+      // Informazioni mittente
+      let senderInfo = '';
+      if (originalMessage.metadata?.groupInfo) {
+        // Messaggio da gruppo
+        senderInfo = `👥 **Gruppo:** ${originalMessage.metadata.groupInfo.name}\n`;
+        senderInfo += originalMessage.from?.name
+          ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
+          : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
+      } else {
+        // Messaggio privato
+        senderInfo = originalMessage.from?.name
+          ? `👤 **Da:** ${originalMessage.from.name}\n📱 **Numero:** ${originalMessage.from.phoneNumber}\n`
+          : `📱 **Da:** ${originalMessage.from.phoneNumber}\n`;
+      }
+      
+      const timeInfo = `⏰ **Quando:** ${timestamp}\n`;
+      const messageSeparator = `${'─'.repeat(30)}\n\n`;
+      
+      // Contenuto del messaggio
+      const messageContent = `💬 **Messaggio:**\n${text}`;
+
+      return `${filterHeader}${separator}${senderInfo}${timeInfo}${messageSeparator}${messageContent}`;
+    } else {
+      // Formattazione semplice per forward legacy
+      const header = originalMessage.from?.name
+        ? `Inoltrato da ${originalMessage.from.name} (${originalMessage.from.phoneNumber})\n\n`
+        : `Inoltrato da ${originalMessage.from.phoneNumber}\n\n`;
+
+      return `${header}${text}`;
+    }
+  }
+
+  // Inoltra messaggio a un numero specifico
+  async forwardText(originalMessage, toPhoneNumber, filterName = null) {
+    const messageBody = this.buildForwardMessage(originalMessage, filterName);
+    return this.sendMessageToNumber(toPhoneNumber, messageBody);
+  }
+
+  // Invia messaggio nella chat separata con formattazione migliorata
+  async sendToSeparateChat(originalMessage, filterName = 'Filtro') {
+    const separateChatNumber = process.env.FORWARD_SEPARATE_CHAT_NUMBER;
+    
+    if (!separateChatNumber) {
+      throw new Error('FORWARD_SEPARATE_CHAT_NUMBER non configurato');
+    }
+
+    console.log(`📤 Invio messaggio filtrato a ${separateChatNumber} via WhatsApp Web`);
+    
+    return this.forwardText(originalMessage, separateChatNumber, filterName);
   }
 
   // Disconnette il client
