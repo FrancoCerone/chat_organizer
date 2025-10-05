@@ -115,7 +115,7 @@ class FilterService {
         // Aggiungi tag
         if (actions.addTags && actions.addTags.length > 0) {
           for (const tag of actions.addTags) {
-            //await message.addTag(tag);
+            await message.addTag(tag);
           }
         }
 
@@ -263,11 +263,324 @@ class FilterService {
   // Elimina un filtro
   async deleteFilter(filterId) {
     try {
-      await Filter.findByIdAndDelete(filterId);
+      await Filter.findByIdAndUpdate(filterId, { isActive: false }, { new: true });
       await this.loadFilters(); // Ricarica filtri
     } catch (error) {
       console.error('Error deleting filter:', error);
       throw error;
+    }
+  }
+
+  // Verifica se un numero è autorizzato come admin
+  isAdmin(number) {
+    const adminNumbers = process.env.ADMIN_PHONE_NUMBERS;
+    if (!adminNumbers) return false;
+    
+    const adminList = adminNumbers.split(',').map(num => num.trim().replace(/[^\d]/g, ''));
+    const cleanNumber = number.replace(/[^\d]/g, '');
+    
+    return adminList.includes(cleanNumber);
+  }
+
+  // Parsifica comando di aggiornamento filtro
+  parseFilterUpdateCommand(messageText) {
+    try {
+      // Formato: "aggiorna filtro <nome_filtro> <campo> <valore>"
+      // Usa un regex più robusto che gestisce spazi nel nome del filtro e valori complessi
+      const updatePattern = /aggiorna\s+filtro\s+([^\s]+(?:\s+[^\s]+)*?)\s+([^\s]+)\s+(.+)/i;
+      const match = messageText.match(updatePattern);
+      
+      if (!match) {
+        return null;
+      }
+
+      let [, filterName, field, value] = match;
+      
+      // Pulisce i valori
+      filterName = filterName.trim();
+      field = field.trim().toLowerCase();
+      value = value.trim();
+
+      return {
+        filterName: filterName,
+        field: field,
+        value: value,
+        isValid: true
+      };
+    } catch (error) {
+      console.error('Error parsing filter update command:', error);
+      return null;
+    }
+  }
+
+
+
+
+  // Gestisce comandi admin
+  async handleAdminCommand(messageData, whatsappWebService = null) {
+    try {
+      // Verifica se il mittente è admin
+      if (!this.isAdmin(messageData.from.phoneNumber)) {
+        console.log(`⚠️ Tentativo comando admin da numero non autorizzato: ${messageData.from.phoneNumber}`);
+        return { success: false, message: 'Non autorizzato a eseguire comandi admin' };
+      }
+
+      const text = messageData.content.text.toLowerCase().trim();
+
+      // Comando help
+      if (text.includes('help filtri') || text.includes('aiuto filtri')) {
+        return await this.sendFilterHelp(messageData.from.phoneNumber, whatsappWebService);
+      }
+
+      // Comando lista filtri
+      if (text.includes('lista filtri') || text.includes('list filtri')) {
+        return await this.sendFilterList(messageData.from.phoneNumber, whatsappWebService);
+      }
+
+      // Comando aggiorna filtro
+      if (text.includes('aggiorna filtro')) {
+        return await this.updateFilterByCommand(messageData, whatsappWebService);
+      }
+
+      return { success: false, message: 'Comando non riconosciuto. Usa "help filtri" per vedere i comandi disponibili.' };
+
+    } catch (error) {
+      console.error('Error handling admin command:', error);
+      return { success: false, message: 'Errore durante l\'esecuzione del comando' };
+    }
+  }
+
+  // Invia help per i comandi filtri
+  async sendFilterHelp(phoneNumber, whatsappWebService) {
+    const helpMessage = `🔧 **COMANDI FILTRI DISPONIBILI:**
+
+📋 **Lista filtri:**
+\`lista filtri\`
+
+📝 **Aggiorna filtro:**
+\`aggiorna filtro <nome> <campo> <valore>\`
+
+**Campi disponibili:**
+• \`keywords\` - Parole chiave (array JSON o stringa)
+• \`authors\` - Autori (array JSON o numero)
+• \`messagetypes\` - Tipi messaggio (array JSON)
+• \`priority\` - Priorità (urgent, high, normal, low)
+• \`important\` - Marca importante (true/false)
+• \`archive\` - Archivia (true/false)
+• \`active\` - Attivo (true/false)
+
+**Esempi:**
+\`aggiorna filtro Messaggi Urgenti keywords ["urgente","emergenza"]\`
+\`aggiorna filtro Messaggi Urgenti priority urgent\`
+\`aggiorna filtro Messaggi Urgenti active false\``;
+
+    if (whatsappWebService && whatsappWebService.isAuthenticated) {
+      try {
+        await whatsappWebService.sendMessageToNumber(phoneNumber, helpMessage);
+        return { success: true, message: 'Help inviato' };
+      } catch (sendError) {
+        console.error('Error sending help:', sendError);
+        return { success: false, message: 'Errore invio help' };
+      }
+    }
+
+    return { success: true, message: helpMessage };
+  }
+
+  // Invia lista filtri
+  async sendFilterList(phoneNumber, whatsappWebService) {
+    try {
+      const filters = await Filter.find({ isActive: true });
+      
+      let listMessage = `📋 **FILTRI ATTIVI (${filters.length}):**\n\n`;
+      
+      filters.forEach((filter, index) => {
+        listMessage += `**${index + 1}. ${filter.name}**\n`;
+        listMessage += `   📝 ${filter.description || 'Nessuna descrizione'}\n`;
+        
+        if (filter.keywords && filter.keywords.length > 0) {
+          listMessage += `   🔍 Keywords: ${filter.keywords.join(', ')}\n`;
+        }
+        
+        if (filter.authors && filter.authors.length > 0) {
+          const authors = filter.authors.map(a => a.phoneNumber || a.name).join(', ');
+          listMessage += `   👤 Autori: ${authors}\n`;
+        }
+        
+        listMessage += `   ⚡ Attivo: ${filter.isActive ? 'Sì' : 'No'}\n\n`;
+      });
+
+      if (whatsappWebService && whatsappWebService.isAuthenticated) {
+        try {
+          await whatsappWebService.sendMessageToNumber(phoneNumber, listMessage);
+          return { success: true, message: 'Lista filtri inviata' };
+        } catch (sendError) {
+          console.error('Error sending filter list:', sendError);
+          return { success: false, message: 'Errore invio lista' };
+        }
+      }
+
+      return { success: true, message: listMessage };
+
+    } catch (error) {
+      console.error('Error getting filter list:', error);
+      return { success: false, message: 'Errore recupero lista filtri' };
+    }
+  }
+
+  // Aggiorna un filtro tramite comando
+  async updateFilterByCommand(messageData, whatsappWebService = null) {
+    try {
+      // Parsifica il comando
+      const command = this.parseFilterUpdateCommand(messageData.content.text);
+      if (!command) {
+        return { success: false, message: 'Formato comando non valido. Usa: "aggiorna filtro <nome> <campo> <valore>"' };
+      }
+
+      // Debug: mostra cosa è stato parsato
+      console.log('🔍 Comando parsato:', {
+        filterName: command.filterName,
+        field: command.field,
+        value: command.value,
+        originalText: messageData.content.text
+      });
+
+      // Trova il filtro
+      const filter = await Filter.findOne({ name: command.filterName });
+      if (!filter) {
+        return { success: false, message: `Filtro "${command.filterName}" non trovato` };
+      }
+
+      // Aggiorna il campo specificato
+      let updateResult = await this.updateFilterField(filter._id, command.field, command.value);
+      
+      if (updateResult.success) {
+        // Invia conferma all'admin
+        if (whatsappWebService && whatsappWebService.isAuthenticated) {
+          const confirmMessage = `✅ Filtro "${command.filterName}" aggiornato!\n` +
+                               `Campo: ${command.field}\n` +
+                               `Nuovo valore: ${command.value}`;
+          
+          try {
+            await whatsappWebService.sendMessageToNumber(messageData.from.phoneNumber, confirmMessage);
+          } catch (sendError) {
+            console.error('Error sending confirmation:', sendError);
+          }
+        }
+        
+        return { success: true, message: `Filtro "${command.filterName}" aggiornato con successo` };
+      } else {
+        return updateResult;
+      }
+
+    } catch (error) {
+      console.error('Error updating filter by command:', error);
+      return { success: false, message: 'Errore durante l\'aggiornamento del filtro' };
+    }
+  }
+
+  // Aggiorna un campo specifico di un filtro
+  async updateFilterField(filterId, field, value) {
+    try {
+      const filter = await Filter.findById(filterId);
+      if (!filter) {
+        return { success: false, message: 'Filtro non trovato' };
+      }
+
+      let updateData = {};
+      
+      // Mappa i campi ai percorsi corretti nel documento
+      switch (field) {
+        case 'keywords':
+          try {
+            // Se inizia con [ e finisce con ], è un array JSON
+            if (value.startsWith('[') && value.endsWith(']')) {
+              value = value.replace(/[“”]/g, '"');
+              const keywords = JSON.parse(value);
+              if (Array.isArray(keywords)) {
+                updateData.keywords = keywords;
+              } else {
+                updateData.keywords = [value];
+              }
+            } else {
+              // Se non è un array JSON, tratta come stringa singola
+              updateData.keywords = [value];
+            }
+          } catch (parseError) {
+            console.log('⚠️ Errore parsing keywords, usando come stringa singola:', parseError.message);
+            // Se il parsing fallisce, tratta come stringa singola
+            updateData.keywords = [value];
+          }
+          break;
+          
+        case 'authors':
+          try {
+            // Se inizia con [ e finisce con ], è un array JSON
+            if (value.startsWith('[') && value.endsWith(']')) {
+              const authors = JSON.parse(value);
+              if (Array.isArray(authors)) {
+                updateData.authors = authors;
+              } else {
+                updateData.authors = [{ phoneNumber: value }];
+              }
+            } else {
+              // Se non è un array JSON, tratta come numero singolo
+              updateData.authors = [{ phoneNumber: value }];
+            }
+          } catch (parseError) {
+            console.log('⚠️ Errore parsing authors, usando come numero singolo:', parseError.message);
+            updateData.authors = [{ phoneNumber: value }];
+          }
+          break;
+          
+        case 'messagetypes':
+          try {
+            // Se inizia con [ e finisce con ], è un array JSON
+            if (value.startsWith('[') && value.endsWith(']')) {
+              const types = JSON.parse(value);
+              if (Array.isArray(types)) {
+                updateData.messageTypes = types;
+              } else {
+                updateData.messageTypes = [value];
+              }
+            } else {
+              // Se non è un array JSON, tratta come stringa singola
+              updateData.messageTypes = [value];
+            }
+          } catch (parseError) {
+            console.log('⚠️ Errore parsing messagetypes, usando come stringa singola:', parseError.message);
+            updateData.messageTypes = [value];
+          }
+          break;
+          
+        case 'priority':
+          updateData['actions.setPriority'] = value;
+          break;
+          
+        case 'important':
+          updateData['actions.markAsImportant'] = value.toLowerCase() === 'true';
+          break;
+          
+        case 'archive':
+          updateData['actions.archive'] = value.toLowerCase() === 'true';
+          break;
+          
+        case 'active':
+          updateData.isActive = value.toLowerCase() === 'true';
+          break;
+          
+        default:
+          return { success: false, message: `Campo "${field}" non riconosciuto` };
+      }
+
+      await Filter.findByIdAndUpdate(filterId, updateData, { new: true });
+      await this.loadFilters(); // Ricarica filtri
+      
+      return { success: true, message: `Campo "${field}" aggiornato` };
+      
+    } catch (error) {
+      console.error('Error updating filter field:', error);
+      return { success: false, message: 'Errore durante l\'aggiornamento del campo' };
     }
   }
 }

@@ -225,6 +225,24 @@ class WhatsappWebService {
       await message.save();
       console.log('💾 Messaggio da gruppo salvato nel database');
       
+      // Controlla se è un comando admin
+      const text = messageData.content.text ? messageData.content.text.toLowerCase() : '';
+      if (text.includes('aggiorna filtro') || text.includes('help filtri') || text.includes('lista filtri') || text.includes('aiuto filtri') || text.includes('list filtri')) {
+        console.log('🔧 Rilevato comando admin');
+        const FilterService = filterServiceModule.FilterService;
+        const commandResult = await FilterService.handleAdminCommand(normalizedMessage, this);
+        
+        if (commandResult.success) {
+          console.log('✅ Comando admin eseguito con successo');
+        } else {
+          console.log('❌ Errore comando admin:', commandResult.message);
+        }
+        
+        // Marca come processato
+        await message.markAsProcessed();
+        return;
+      }
+
       // Applica i filtri usando il sistema unificato
       const FilterService = filterServiceModule.FilterService;
       const filterResults = await FilterService.applyFilters(normalizedMessage);
