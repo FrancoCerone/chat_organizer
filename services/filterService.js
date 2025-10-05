@@ -275,7 +275,7 @@ class FilterService {
   // Elimina un filtro
   async deleteFilter(filterId) {
     try {
-      await Filter.findByIdAndUpdate(filterId, { isActive: false }, { new: true });
+      await Filter.findByIdAndUpdate(filterId, { enabled: false }, { new: true });
       await this.loadFilters(); // Ricarica filtri
     } catch (error) {
       console.error('Error deleting filter:', error);
@@ -297,9 +297,9 @@ class FilterService {
   // Parsifica comando di aggiornamento filtro
   parseFilterUpdateCommand(messageText) {
     try {
-      // Formato: "aggiorna filtro <nome_filtro> <campo> <valore>"
+      // Formato: "update filter <filter_name> <field> <value>"
       // Usa un regex più robusto che gestisce spazi nel nome del filtro e valori complessi
-      const updatePattern = /aggiorna\s+filtro\s+([^\s]+(?:\s+[^\s]+)*?)\s+([^\s]+)\s+(.+)/i;
+      const updatePattern = /update\s+filter\s+([^\s]+(?:\s+[^\s]+)*?)\s+([^\s]+)\s+(.+)/i;
       const match = messageText.match(updatePattern);
       
       if (!match) {
@@ -339,22 +339,27 @@ class FilterService {
 
       const text = messageData.content.text.toLowerCase().trim();
 
-      // Comando help
-      if (text.includes('help filtri') || text.includes('aiuto filtri')) {
+      // Comando help generale
+      if (text === 'help') {
+        return await this.sendGeneralHelp(messageData.from.phoneNumber, whatsappWebService);
+      }
+
+      // Comando help filtri
+      if (text.includes('help filters')) {
         return await this.sendFilterHelp(messageData.from.phoneNumber, whatsappWebService);
       }
 
       // Comando lista filtri
-      if (text.includes('lista filtri') || text.includes('list filtri')) {
+      if (text.includes('list filters') || text.includes('show filters')) {
         return await this.sendFilterList(messageData.from.phoneNumber, whatsappWebService);
       }
 
       // Comando aggiorna filtro
-      if (text.includes('aggiorna filtro')) {
+      if (text.includes('update filter')) {
         return await this.updateFilterByCommand(messageData, whatsappWebService);
       }
 
-      return { success: false, message: 'Comando non riconosciuto. Usa "help filtri" per vedere i comandi disponibili.' };
+      return { success: false, message: 'Command not recognized. Use "help" to see available commands.' };
 
     } catch (error) {
       console.error('Error handling admin command:', error);
@@ -362,31 +367,77 @@ class FilterService {
     }
   }
 
+  // Invia help generale per tutti i comandi admin
+  async sendGeneralHelp(phoneNumber, whatsappWebService) {
+    const helpMessage = `🤖 **AVAILABLE ADMIN COMMANDS**
+
+🔧 **General Commands:**
+• \`help\` - Show this message
+• \`help filters\` - Specific help for filters
+
+📋 **Filter Management:**
+• \`list filters\` or \`show filters\` - Show all active filters
+• \`update filter <name> <field> <value>\` - Update a filter
+
+**Available filter fields:**
+• \`keywords\` - Keywords (JSON array or string)
+• \`keywordmatchmode\` - Keyword matching mode (AND or OR)
+• \`authors\` - Authors (JSON array or phone number)
+• \`messagetypes\` - Message types (JSON array)
+• \`priority\` - Priority (urgent, high, normal, low)
+• \`important\` - Mark as important (true/false)
+• \`archive\` - Archive (true/false)
+• \`active\` - Active status (true/false)
+
+**Command examples:**
+\`update filter Urgent Messages keywords ["urgent","emergency"]\`
+\`update filter Urgent Messages keywordmatchmode AND\`
+\`update filter Urgent Messages priority urgent\`
+\`update filter Urgent Messages active false\`
+
+💡 **Tips:**
+- Use \`help filters\` for detailed filter information
+- Commands are case-insensitive
+- JSON arrays must use double quotes: ["value1","value2"]`;
+
+    if (whatsappWebService && whatsappWebService.isAuthenticated) {
+      try {
+        await whatsappWebService.sendMessageToNumber(phoneNumber, helpMessage);
+        return { success: true, message: 'Help generale inviato' };
+      } catch (sendError) {
+        console.error('Error sending general help:', sendError);
+        return { success: false, message: 'Errore invio help generale' };
+      }
+    }
+
+    return { success: true, message: helpMessage };
+  }
+
   // Invia help per i comandi filtri
   async sendFilterHelp(phoneNumber, whatsappWebService) {
-    const helpMessage = `🔧 **COMANDI FILTRI DISPONIBILI:**
+    const helpMessage = `🔧 **FILTER COMMANDS:**
 
-📋 **Lista filtri:**
-\`lista filtri\`
+📋 **List filters:**
+\`list filters\` or \`show filters\`
 
-📝 **Aggiorna filtro:**
-\`aggiorna filtro <nome> <campo> <valore>\`
+📝 **Update filter:**
+\`update filter <name> <field> <value>\`
 
-**Campi disponibili:**
-• \`keywords\` - Parole chiave (array JSON o stringa)
-• \`keywordmatchmode\` - Modalità keywords (AND o OR)
-• \`authors\` - Autori (array JSON o numero)
-• \`messagetypes\` - Tipi messaggio (array JSON)
-• \`priority\` - Priorità (urgent, high, normal, low)
-• \`important\` - Marca importante (true/false)
-• \`archive\` - Archivia (true/false)
-• \`active\` - Attivo (true/false)
+**Available fields:**
+• \`keywords\` - Keywords (JSON array or string)
+• \`keywordmatchmode\` - Keyword matching mode (AND or OR)
+• \`authors\` - Authors (JSON array or phone number)
+• \`messagetypes\` - Message types (JSON array)
+• \`priority\` - Priority (urgent, high, normal, low)
+• \`important\` - Mark as important (true/false)
+• \`archive\` - Archive (true/false)
+• \`active\` - Active status (true/false)
 
-**Esempi:**
-\`aggiorna filtro Messaggi Urgenti keywords ["urgente","emergenza"]\`
-\`aggiorna filtro Messaggi Urgenti keywordmatchmode AND\`
-\`aggiorna filtro Messaggi Urgenti priority urgent\`
-\`aggiorna filtro Messaggi Urgenti active false\``;
+**Examples:**
+\`update filter Urgent Messages keywords ["urgent","emergency"]\`
+\`update filter Urgent Messages keywordmatchmode AND\`
+\`update filter Urgent Messages priority urgent\`
+\`update filter Urgent Messages active false\``;
 
     if (whatsappWebService && whatsappWebService.isAuthenticated) {
       try {
@@ -404,13 +455,13 @@ class FilterService {
   // Invia lista filtri
   async sendFilterList(phoneNumber, whatsappWebService) {
     try {
-      const filters = await Filter.find({ isEnabled: true });
+      const filters = await Filter.find({ enabled: true });
       
-      let listMessage = `📋 **FILTRI ATTIVI (${filters.length}):**\n\n`;
+      let listMessage = `📋 **ACTIVE FILTERS (${filters.length}):**\n\n`;
       
       filters.forEach((filter, index) => {
         listMessage += `**${index + 1}. ${filter.name}**\n`;
-        listMessage += `   📝 ${filter.description || 'Nessuna descrizione'}\n`;
+        listMessage += `   📝 ${filter.description || 'No description'}\n`;
         
         if (filter.keywords && filter.keywords.length > 0) {
           const matchMode = filter.keywordMatchMode || 'OR';
@@ -419,10 +470,10 @@ class FilterService {
         
         if (filter.authors && filter.authors.length > 0) {
           const authors = filter.authors.map(a => a.phoneNumber || a.name).join(', ');
-          listMessage += `   👤 Autori: ${authors}\n`;
+          listMessage += `   👤 Authors: ${authors}\n`;
         }
         
-        listMessage += `   ⚡ Attivo: ${filter.isActive ? 'Sì' : 'No'}\n\n`;
+        listMessage += `   ⚡ Active: ${filter.enabled ? 'Yes' : 'No'}\n\n`;
       });
 
       if (whatsappWebService && whatsappWebService.isAuthenticated) {
@@ -449,7 +500,7 @@ class FilterService {
       // Parsifica il comando
       const command = this.parseFilterUpdateCommand(messageData.content.text);
       if (!command) {
-        return { success: false, message: 'Formato comando non valido. Usa: "aggiorna filtro <nome> <campo> <valore>"' };
+        return { success: false, message: 'Invalid command format. Use: "update filter <name> <field> <value>"' };
       }
 
       // Debug: mostra cosa è stato parsato
@@ -463,7 +514,7 @@ class FilterService {
       // Trova il filtro
       const filter = await Filter.findOne({ name: command.filterName });
       if (!filter) {
-        return { success: false, message: `Filtro "${command.filterName}" non trovato` };
+        return { success: false, message: `Filter "${command.filterName}" not found` };
       }
 
       // Aggiorna il campo specificato
@@ -472,9 +523,9 @@ class FilterService {
       if (updateResult.success) {
         // Invia conferma all'admin
         if (whatsappWebService && whatsappWebService.isAuthenticated) {
-          const confirmMessage = `✅ Filtro "${command.filterName}" aggiornato!\n` +
-                               `Campo: ${command.field}\n` +
-                               `Nuovo valore: ${command.value}`;
+          const confirmMessage = `✅ Filter "${command.filterName}" updated!\n` +
+                               `Field: ${command.field}\n` +
+                               `New value: ${command.value}`;
           
           try {
             await whatsappWebService.sendMessageToNumber(messageData.from.phoneNumber, confirmMessage);
@@ -483,7 +534,7 @@ class FilterService {
           }
         }
         
-        return { success: true, message: `Filtro "${command.filterName}" aggiornato con successo` };
+        return { success: true, message: `Filter "${command.filterName}" updated successfully` };
       } else {
         return updateResult;
       }
@@ -499,7 +550,7 @@ class FilterService {
     try {
       const filter = await Filter.findById(filterId);
       if (!filter) {
-        return { success: false, message: 'Filtro non trovato' };
+        return { success: false, message: 'Filter not found' };
       }
 
       let updateData = {};
@@ -581,7 +632,7 @@ class FilterService {
           break;
           
         case 'active':
-          updateData.isActive = value.toLowerCase() === 'true';
+          updateData.enabled = value.toLowerCase() === 'true';
           break;
           
         case 'keywordmatchmode':
@@ -589,22 +640,22 @@ class FilterService {
           if (mode === 'AND' || mode === 'OR') {
             updateData.keywordMatchMode = mode;
           } else {
-            return { success: false, message: `Modalità "${value}" non valida. Usa "AND" o "OR"` };
+            return { success: false, message: `Mode "${value}" is invalid. Use "AND" or "OR"` };
           }
           break;
           
         default:
-          return { success: false, message: `Campo "${field}" non riconosciuto` };
+          return { success: false, message: `Field "${field}" not recognized` };
       }
 
       await Filter.findByIdAndUpdate(filterId, updateData, { new: true });
       await this.loadFilters(); // Ricarica filtri
       
-      return { success: true, message: `Campo "${field}" aggiornato` };
+      return { success: true, message: `Field "${field}" updated` };
       
     } catch (error) {
       console.error('Error updating filter field:', error);
-      return { success: false, message: 'Errore durante l\'aggiornamento del campo' };
+      return { success: false, message: 'Error updating field' };
     }
   }
 }
