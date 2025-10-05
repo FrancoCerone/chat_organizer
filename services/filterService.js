@@ -56,9 +56,21 @@ class FilterService {
       // Controllo parole chiave
       if (filter.keywords && filter.keywords.length > 0 && messageData.content.text) {
         const text = messageData.content.text.toLowerCase();
-        const keywordMatch = filter.keywords.some(keyword => 
-          text.includes(keyword.toLowerCase())
-        );
+        const keywordMatchMode = filter.keywordMatchMode || 'OR'; // Default OR se non specificato
+        
+        let keywordMatch;
+        if (keywordMatchMode === 'AND') {
+          // AND: tutte le keywords devono essere presenti
+          keywordMatch = filter.keywords.every(keyword =>
+            text.includes(keyword.toLowerCase())
+          );
+        } else {
+          // OR: almeno una keyword deve essere presente (default)
+          keywordMatch = filter.keywords.some(keyword =>
+            text.includes(keyword.toLowerCase())
+          );
+        }
+        
         if (!keywordMatch) return false;
       }
 
@@ -362,6 +374,7 @@ class FilterService {
 
 **Campi disponibili:**
 • \`keywords\` - Parole chiave (array JSON o stringa)
+• \`keywordmatchmode\` - Modalità keywords (AND o OR)
 • \`authors\` - Autori (array JSON o numero)
 • \`messagetypes\` - Tipi messaggio (array JSON)
 • \`priority\` - Priorità (urgent, high, normal, low)
@@ -371,6 +384,7 @@ class FilterService {
 
 **Esempi:**
 \`aggiorna filtro Messaggi Urgenti keywords ["urgente","emergenza"]\`
+\`aggiorna filtro Messaggi Urgenti keywordmatchmode AND\`
 \`aggiorna filtro Messaggi Urgenti priority urgent\`
 \`aggiorna filtro Messaggi Urgenti active false\``;
 
@@ -390,7 +404,7 @@ class FilterService {
   // Invia lista filtri
   async sendFilterList(phoneNumber, whatsappWebService) {
     try {
-      const filters = await Filter.find({ isActive: true });
+      const filters = await Filter.find({ isEnabled: true });
       
       let listMessage = `📋 **FILTRI ATTIVI (${filters.length}):**\n\n`;
       
@@ -399,7 +413,8 @@ class FilterService {
         listMessage += `   📝 ${filter.description || 'Nessuna descrizione'}\n`;
         
         if (filter.keywords && filter.keywords.length > 0) {
-          listMessage += `   🔍 Keywords: ${filter.keywords.join(', ')}\n`;
+          const matchMode = filter.keywordMatchMode || 'OR';
+          listMessage += `   🔍 Keywords: ${filter.keywords.join(', ')} (${matchMode})\n`;
         }
         
         if (filter.authors && filter.authors.length > 0) {
@@ -567,6 +582,15 @@ class FilterService {
           
         case 'active':
           updateData.isActive = value.toLowerCase() === 'true';
+          break;
+          
+        case 'keywordmatchmode':
+          const mode = value.toUpperCase();
+          if (mode === 'AND' || mode === 'OR') {
+            updateData.keywordMatchMode = mode;
+          } else {
+            return { success: false, message: `Modalità "${value}" non valida. Usa "AND" o "OR"` };
+          }
           break;
           
         default:

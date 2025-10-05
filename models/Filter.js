@@ -18,6 +18,13 @@ const filterSchema = new mongoose.Schema({
   // Parole chiave da cercare nel testo
   keywords: [String],
   
+  // Modalità di matching per le keywords (AND o OR)
+  keywordMatchMode: {
+    type: String,
+    enum: ['AND', 'OR'],
+    default: 'OR'
+  },
+  
   // Tipi di messaggio da filtrare
   messageTypes: [{
     type: String,
@@ -52,7 +59,7 @@ const filterSchema = new mongoose.Schema({
       enabled: Boolean,
       message: String
     },
-    forwardTo: ['+393476835437'], // numeri di telefono
+    forwardTo: [String], // numeri di telefono
     archive: {
       type: Boolean,
       default: false
