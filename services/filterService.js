@@ -697,6 +697,13 @@ const setupFilters = async () => {
             actions: {
               addTags: ['lavoro']
             }
+          },
+          {
+            name: 'Inoltra Tutto',
+            description: 'Inoltra automaticamente tutti i messaggi ricevuti',
+            actions: {
+              addTags: ['inoltro-automatico']
+            }
           }
         ];
       }
@@ -725,6 +732,13 @@ const setupFilters = async () => {
           },
           actions: {
             addTags: ['lavoro']
+          }
+        },
+        {
+          name: 'Inoltra Tutto',
+          description: 'Inoltra automaticamente tutti i messaggi ricevuti',
+          actions: {
+            addTags: ['inoltro-automatico']
           }
         }
       ];
