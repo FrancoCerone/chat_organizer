@@ -101,10 +101,63 @@ class FilterService {
         }
       }
 
+      // Controllo unicità messaggi (uniqueText)
+      if (filter.uniqueText && filter.uniqueText.enabled) {
+        const isUnique = await this.checkMessageUniqueness(messageData, filter);
+        if (!isUnique) {
+          console.log(`⚠️ Messaggio duplicato rilevato - tag: ${filter.uniqueText.tag}`);
+          return false;
+        }
+      }
+
       return true;
     } catch (error) {
       console.error('Error checking filter match:', error);
       return false;
+    }
+  }
+
+  // Verifica se un messaggio è unico nel time window configurato
+  async checkMessageUniqueness(messageData, filter) {
+    try {
+      if (!filter.uniqueText || !filter.uniqueText.enabled) {
+        return true; // Se non abilitato, considera sempre unico
+      }
+
+      const tag = filter.uniqueText.tag;
+      const timeWindowSeconds = filter.uniqueText.timeWindowSeconds || 60;
+
+      if (!tag) {
+        console.log('⚠️ uniqueText.tag non configurato nel filtro');
+        return true;
+      }
+
+      // Calcola il timestamp di inizio del time window
+      const messageTimestamp = new Date(messageData.timestamp);
+      const timeWindowStart = new Date(messageTimestamp.getTime() - timeWindowSeconds * 1000);
+
+      // Cerca messaggi con lo stesso tag e testo nel time window
+      const duplicateMessages = await Message.find({
+        'metadata.tags': tag,
+        'content.text': messageData.content.text,
+        timestamp: {
+          $gte: timeWindowStart.toISOString(),
+          $lte: messageTimestamp.toISOString()
+        }
+      }).limit(1);
+
+      // Se esiste almeno un messaggio con lo stesso tag e testo nel time window, il messaggio non è unico
+      const isUnique = duplicateMessages.length === 0;
+
+      if (!isUnique) {
+        console.log(`📋 Messaggio duplicato trovato: tag="${tag}", testo="${messageData.content.text?.substring(0, 50)}...", timeWindow=${timeWindowSeconds}s, trovati ${duplicateMessages.length} messaggi`);
+      }
+
+      return isUnique;
+
+    } catch (error) {
+      console.error('Error checking message uniqueness:', error);
+      return true; // In caso di errore, considera il messaggio come unico per non bloccare il flusso
     }
   }
 
@@ -699,7 +752,7 @@ const setupFilters = async () => {
             }
           },
           {
-            name: 'Inoltra Tutto',
+            name: '',
             description: 'Inoltra automaticamente tutti i messaggi ricevuti',
             actions: {
               addTags: ['inoltro-automatico']
@@ -713,33 +766,28 @@ const setupFilters = async () => {
       // Filtri predefiniti hardcoded
       defaultFilters = [
         {
-          name: 'Messaggi Urgenti',
-          description: 'Filtra messaggi con parole chiave urgenti',
-          keywords: ['urgente', 'emergenza', 'asap', 'subito'],
+          name: 'Tutti i messaggio',
+          description: 'Tutti i messaggio',
+
           actions: {
-            markAsImportant: true,
-            setPriority: 'urgent',
-            addTags: ['urgente']
+            addTags: ['all']
           }
         },
         {
-          name: 'Messaggi di Lavoro',
-          description: 'Filtra messaggi durante orario lavorativo',
-          timeRange: {
-            start: '09:00',
-            end: '18:00',
-            days: [1, 2, 3, 4, 5] // Lun-Ven
+          name: 'Raggruppa-Diversi',
+          description: 'Raggruppa-Diversi',
+          actions: {
+            addTags: ['raggruppa-Diversi']
+          },
+          enabled: true,
+          uniqueText: {
+            enabled: true,
+            tag: 'all'
           },
           actions: {
-            addTags: ['lavoro']
+            forwardTo: ['393476835437'],
           }
-        },
-        {
-          name: 'Inoltra Tutto',
-          description: 'Inoltra automaticamente tutti i messaggi ricevuti',
-          actions: {
-            addTags: ['inoltro-automatico']
-          }
+
         }
       ];
     }

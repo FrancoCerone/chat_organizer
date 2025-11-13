@@ -44,6 +44,21 @@ const filterSchema = new mongoose.Schema({
     enum: ['low', 'medium', 'high', 'urgent']
   },
   
+  // Controllo unicità messaggi
+  uniqueText: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    tag: {
+      type: String
+    },
+    timeWindowSeconds: {
+      type: Number,
+      default: 60 // default 60 secondi
+    }
+  },
+  
   // Azioni da eseguire quando il filtro matcha
   actions: {
     markAsImportant: {
