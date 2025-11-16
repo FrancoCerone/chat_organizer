@@ -127,27 +127,29 @@ class FilterService {
       const tag = filter.uniqueText.tag;
       const timeWindowSeconds = filter.uniqueText.timeWindowSeconds || 60;
 
-      if (!tag) {
-        console.log('⚠️ uniqueText.tag non configurato nel filtro');
-        return true;
-      }
 
       // Calcola il timestamp di inizio del time window
       const messageTimestamp = new Date(messageData.timestamp);
       const timeWindowStart = new Date(messageTimestamp.getTime() - timeWindowSeconds * 1000);
 
-      // Cerca messaggi con lo stesso tag e testo nel time window
-      const duplicateMessages = await Message.find({
-        'metadata.tags': tag,
+      // Costruisci dinamicamente il filtro
+      const query = {
         'content.text': messageData.content.text,
         timestamp: {
           $gte: timeWindowStart.toISOString(),
           $lte: messageTimestamp.toISOString()
         }
-      }).limit(1);
+      };
+
+      // Se il tag è valorizzato aggiungilo al filtro
+      if (tag) {
+        query['metadata.tags'] = tag;
+      }
+
+      const duplicateMessages = await Message.find(query).limit(2);
 
       // Se esiste almeno un messaggio con lo stesso tag e testo nel time window, il messaggio non è unico
-      const isUnique = duplicateMessages.length === 0;
+      const isUnique = duplicateMessages.length == 1;
 
       if (!isUnique) {
         console.log(`📋 Messaggio duplicato trovato: tag="${tag}", testo="${messageData.content.text?.substring(0, 50)}...", timeWindow=${timeWindowSeconds}s, trovati ${duplicateMessages.length} messaggi`);
@@ -766,14 +768,6 @@ const setupFilters = async () => {
       // Filtri predefiniti hardcoded
       defaultFilters = [
         {
-          name: 'Tutti i messaggio',
-          description: 'Tutti i messaggio',
-
-          actions: {
-            addTags: ['all']
-          }
-        },
-        {
           name: 'Raggruppa-Diversi',
           description: 'Raggruppa-Diversi',
           actions: {
@@ -781,8 +775,7 @@ const setupFilters = async () => {
           },
           enabled: true,
           uniqueText: {
-            enabled: true,
-            tag: 'all'
+            enabled: true
           },
           actions: {
             forwardTo: ['393476835437'],
