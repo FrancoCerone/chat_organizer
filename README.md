@@ -86,9 +86,42 @@ npm start
 ```
 
 ### Con Docker
+
+#### Opzione 1: Docker Compose (consigliato per sviluppo)
 ```bash
+# Assicurati di avere un file .env configurato
+cp env.example .env
+# Modifica .env con le tue configurazioni
+
+# Avvia tutti i servizi (app + MongoDB)
 docker-compose up -d
+
+# Vedi i log
+docker-compose logs -f app
+
+# Ferma i servizi
+docker-compose down
 ```
+
+#### Opzione 2: Solo Docker (senza docker-compose)
+```bash
+# Build dell'immagine
+docker build -t chat-organizer .
+
+# Esegui il container
+docker run -d \
+  --name chat-organizer \
+  -p 3000:3000 \
+  --env-file .env \
+  -v $(pwd)/wwebjs_auth:/app/.wwebjs_auth \
+  -v $(pwd)/wwebjs_cache:/app/.wwebjs_cache \
+  chat-organizer
+
+# Vedi i log
+docker logs -f chat-organizer
+```
+
+**Nota:** Le directory `wwebjs_auth` e `wwebjs_cache` vengono montate come volumi per mantenere le sessioni WhatsApp persistenti.
 
 ## Documentazione API
 
