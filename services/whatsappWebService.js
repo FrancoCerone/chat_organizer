@@ -74,13 +74,6 @@ class WhatsappWebService {
       // Determina se siamo su Render o in un ambiente cloud
       const isCloudEnvironment = process.env.RENDER || process.env.NODE_ENV === 'production';
       
-      // Configura la cache directory di Puppeteer PRIMA di inizializzare whatsapp-web.js
-      if (isCloudEnvironment && !process.env.PUPPETEER_CACHE_DIR) {
-        const cacheDir = '/opt/render/.cache/puppeteer';
-        process.env.PUPPETEER_CACHE_DIR = cacheDir;
-        console.log(`📁 Cache directory Puppeteer configurata: ${cacheDir}`);
-      }
-      
       // Argomenti base per tutti gli ambienti
       const baseArgs = [
         '--no-sandbox',
@@ -194,7 +187,7 @@ class WhatsappWebService {
         if (!chromeFound) {
           console.log('📦 Chrome non trovato, tentativo di installazione...');
           try {
-            const { install, getInstalledBrowsers } = require('@puppeteer/browsers');
+            const { install } = require('@puppeteer/browsers');
             const cacheDirectory = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
             
             // Assicurati che la directory esista
@@ -202,45 +195,17 @@ class WhatsappWebService {
               fs.mkdirSync(cacheDirectory, { recursive: true });
             }
             
-            // Ottieni la versione di Chrome che puppeteer-core si aspetta
-            let chromeVersion = 'latest';
-            try {
-              // Prova a ottenere la versione da puppeteer-core
-              const puppeteerCore = require('whatsapp-web.js/node_modules/puppeteer-core');
-              if (puppeteerCore && puppeteerCore.executablePath) {
-                // Estrai la versione dal percorso se possibile
-                const execPath = puppeteerCore.executablePath();
-                console.log(`🔍 Versione Chrome richiesta da puppeteer-core: ${execPath}`);
-              }
-            } catch (e) {
-              console.log('⚠️ Impossibile determinare versione Chrome da puppeteer-core, uso latest');
-            }
-            
-            console.log(`📥 Installazione Chrome ${chromeVersion} in: ${cacheDirectory}`);
+            console.log(`📥 Installazione Chrome in: ${cacheDirectory}`);
             const browserPath = await install({
               browser: 'chrome',
-              buildId: chromeVersion,
               cacheDir: cacheDirectory
             });
             
             puppeteerConfig.executablePath = browserPath.executablePath;
             console.log(`✅ Chrome installato in: ${browserPath.executablePath}`);
-            
-            // Verifica che il file esista e sia eseguibile
-            if (fs.existsSync(browserPath.executablePath)) {
-              // Rendi eseguibile
-              try {
-                fs.chmodSync(browserPath.executablePath, 0o755);
-              } catch (chmodErr) {
-                console.log('⚠️ Impossibile rendere Chrome eseguibile:', chmodErr.message);
-              }
-              chromeFound = true;
-            } else {
-              console.error('❌ Chrome installato ma file non trovato:', browserPath.executablePath);
-            }
+            chromeFound = true;
           } catch (installError) {
             console.error('❌ Errore durante l\'installazione di Chrome:', installError.message);
-            console.error('Stack:', installError.stack);
             console.log('⚠️ Continuo senza Chrome configurato, Puppeteer proverà a trovarlo automaticamente');
           }
         }
