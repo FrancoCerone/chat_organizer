@@ -104,6 +104,44 @@ class WhatsappWebService {
         const fs = require('fs');
         const path = require('path');
         
+        // Funzione helper per cercare Chrome ricorsivamente
+        const findChromeRecursive = (dir, maxDepth = 3, currentDepth = 0) => {
+          if (currentDepth >= maxDepth) return null;
+          
+          try {
+            if (!fs.existsSync(dir)) return null;
+            
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            
+            for (const entry of entries) {
+              const fullPath = path.join(dir, entry.name);
+              
+              // Se è il file chrome eseguibile
+              if (entry.isFile() && entry.name === 'chrome') {
+                // Verifica che sia eseguibile
+                try {
+                  fs.accessSync(fullPath, fs.constants.F_OK | fs.constants.X_OK);
+                  return fullPath;
+                } catch {
+                  continue;
+                }
+              }
+              
+              // Se è una directory, cerca ricorsivamente
+              if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                const found = findChromeRecursive(fullPath, maxDepth, currentDepth + 1);
+                if (found) return found;
+              }
+            }
+          } catch (err) {
+            // Ignora errori di lettura
+          }
+          
+          return null;
+        };
+        
+        let chromeFound = false;
+        
         try {
           const puppeteer = require('puppeteer');
           // Ottieni il percorso del browser installato da puppeteer
@@ -111,25 +149,65 @@ class WhatsappWebService {
           if (executablePath && fs.existsSync(executablePath)) {
             puppeteerConfig.executablePath = executablePath;
             console.log(`✅ Chrome trovato in: ${executablePath}`);
-          } else {
-            console.log(`⚠️ Chrome non trovato in: ${executablePath}`);
-            // Prova percorsi alternativi comuni su Render
-            const possiblePaths = [
-              process.env.PUPPETEER_EXECUTABLE_PATH,
-              '/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux/chrome',
-              path.join(process.env.HOME || '/opt/render', '.cache/puppeteer/chrome')
-            ].filter(Boolean);
-            
-            for (const possiblePath of possiblePaths) {
-              if (fs.existsSync(possiblePath)) {
-                puppeteerConfig.executablePath = possiblePath;
-                console.log(`✅ Chrome trovato in percorso alternativo: ${possiblePath}`);
-                break;
-              }
-            }
+            chromeFound = true;
           }
         } catch (error) {
           console.log('⚠️ Impossibile ottenere il percorso di Chrome da puppeteer:', error.message);
+        }
+        
+        // Se Chrome non è stato trovato, prova a cercarlo in percorsi alternativi
+        if (!chromeFound) {
+          console.log('🔍 Cercando Chrome in percorsi alternativi...');
+          
+          const cacheDir = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+          const homeDir = process.env.HOME || '/opt/render';
+          
+          // Cerca in percorsi specifici
+          const searchDirs = [
+            process.env.PUPPETEER_EXECUTABLE_PATH ? path.dirname(process.env.PUPPETEER_EXECUTABLE_PATH) : null,
+            cacheDir,
+            path.join(cacheDir, 'chrome'),
+            path.join(homeDir, '.cache', 'puppeteer'),
+            path.join(homeDir, '.cache', 'puppeteer', 'chrome'),
+            path.join(process.cwd(), 'node_modules', 'puppeteer', '.local-chromium'),
+          ].filter(Boolean);
+          
+          for (const searchDir of searchDirs) {
+            const found = findChromeRecursive(searchDir);
+            if (found) {
+              puppeteerConfig.executablePath = found;
+              console.log(`✅ Chrome trovato: ${found}`);
+              chromeFound = true;
+              break;
+            }
+          }
+        }
+        
+        // Se Chrome ancora non è stato trovato, prova a installarlo
+        if (!chromeFound) {
+          console.log('📦 Chrome non trovato, tentativo di installazione...');
+          try {
+            const { install } = require('@puppeteer/browsers');
+            const cacheDirectory = process.env.PUPPETEER_CACHE_DIR || '/opt/render/.cache/puppeteer';
+            
+            // Assicurati che la directory esista
+            if (!fs.existsSync(cacheDirectory)) {
+              fs.mkdirSync(cacheDirectory, { recursive: true });
+            }
+            
+            console.log(`📥 Installazione Chrome in: ${cacheDirectory}`);
+            const browserPath = await install({
+              browser: 'chrome',
+              cacheDir: cacheDirectory
+            });
+            
+            puppeteerConfig.executablePath = browserPath.executablePath;
+            console.log(`✅ Chrome installato in: ${browserPath.executablePath}`);
+            chromeFound = true;
+          } catch (installError) {
+            console.error('❌ Errore durante l\'installazione di Chrome:', installError.message);
+            console.log('⚠️ Continuo senza Chrome configurato, Puppeteer proverà a trovarlo automaticamente');
+          }
         }
       } else {
         console.log('💻 Configurazione Puppeteer per ambiente locale');
