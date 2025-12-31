@@ -74,7 +74,15 @@ async function processMessage(messageData, webhookData) {
     }
     
     // Salva messaggio nel database
-    const message = new Message(normalizedMessage);
+    const USE_MEMORY_STORAGE = process.env.USE_MEMORY_STORAGE === 'true';
+    let message;
+    if (USE_MEMORY_STORAGE) {
+      // In modalità memoria, Message è una funzione async che restituisce un proxy con save()
+      message = await Message(normalizedMessage);
+    } else {
+      // In modalità database, Message è un costruttore Mongoose
+      message = new Message(normalizedMessage);
+    }
     await message.save();
     
     console.log('💾 Message saved to database');

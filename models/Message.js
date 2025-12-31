@@ -1,4 +1,7 @@
 const mongoose = require('mongoose');
+const { getMemoryStorage } = require('../services/memoryStorage');
+
+const USE_MEMORY_STORAGE = process.env.USE_MEMORY_STORAGE === 'true';
 
 const messageSchema = new mongoose.Schema({
   // WhatsApp message ID
@@ -128,6 +131,57 @@ messageSchema.methods.setPriority = function(priority) {
   return this.save();
 };
 
-module.exports = mongoose.model('Message', messageSchema);
+// Crea il modello Mongoose standard
+const MessageModel = mongoose.model('Message', messageSchema);
+
+// Wrapper che supporta sia MongoDB che memoria
+if (USE_MEMORY_STORAGE) {
+  // Funzione costruttore per memoria
+  const Message = function(data) {
+    return getMemoryStorage().createMessage(data);
+  };
+  
+  // Metodi statici - simula Query di Mongoose
+  Message.find = function(query) {
+    const storage = getMemoryStorage();
+    // Crea un oggetto che simula una Query Mongoose
+    const queryObj = {
+      _query: query,
+      _limit: null,
+      async exec() {
+        return storage.findMessages(this._query, { limit: this._limit });
+      },
+      limit(n) {
+        this._limit = n;
+        return this;
+      },
+      // Per compatibilità, se chiamato direttamente con await
+      then: async function(resolve, reject) {
+        try {
+          const results = await storage.findMessages(this._query, { limit: this._limit });
+          return resolve(results);
+        } catch (error) {
+          return reject(error);
+        }
+      },
+      catch: function(reject) {
+        return this.then(null, reject);
+      }
+    };
+    return queryObj;
+  };
+  
+  Message.findOne = function(query) {
+    return getMemoryStorage().findOneMessage(query);
+  };
+  
+  Message.findById = function(id) {
+    return getMemoryStorage().findMessageById(id);
+  };
+  
+  module.exports = Message;
+} else {
+  module.exports = MessageModel;
+}
 
 

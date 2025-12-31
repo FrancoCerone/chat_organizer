@@ -786,10 +786,20 @@ const setupFilters = async () => {
     }
 
     // Crea i filtri se non esistono
+    const USE_MEMORY_STORAGE = process.env.USE_MEMORY_STORAGE === 'true';
+    
     for (const filterData of defaultFilters) {
       const existingFilter = await Filter.findOne({ name: filterData.name });
       if (!existingFilter) {
-        await new Filter(filterData).save();
+        // In modalità memoria, Filter è una funzione async che restituisce un proxy con save()
+        // In modalità database, Filter è un costruttore Mongoose
+        let filter;
+        if (USE_MEMORY_STORAGE) {
+          filter = await Filter(filterData);
+        } else {
+          filter = new Filter(filterData);
+        }
+        await filter.save();
         console.log(`✅ Created default filter: ${filterData.name}`);
       } else {
         console.log(`ℹ️ Filter already exists: ${filterData.name}`);

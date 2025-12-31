@@ -1,4 +1,7 @@
 const mongoose = require('mongoose');
+const { getMemoryStorage } = require('../services/memoryStorage');
+
+const USE_MEMORY_STORAGE = process.env.USE_MEMORY_STORAGE === 'true';
 
 const filterSchema = new mongoose.Schema({
   name: {
@@ -116,7 +119,89 @@ filterSchema.statics.getActiveFilters = function() {
   return this.find({ enabled: true });
 };
 
-module.exports = mongoose.model('Filter', filterSchema);
+// Crea il modello Mongoose standard
+const FilterModel = mongoose.model('Filter', filterSchema);
+
+// Esporta il wrapper che supporta sia MongoDB che memoria
+if (USE_MEMORY_STORAGE) {
+  // Wrapper per memoria
+  const Filter = function(data) {
+    return getMemoryStorage().createFilter(data);
+  };
+  
+  // Metodi statici
+  Filter.find = function(query) {
+    const storage = getMemoryStorage();
+    // Crea un oggetto che simula una Query Mongoose
+    const queryObj = {
+      _query: query,
+      _sort: null,
+      async exec() {
+        let results = await storage.findFilters(this._query);
+        // Applica sort se specificato
+        if (this._sort) {
+          const [field, direction] = this._sort.split(' ');
+          const dir = direction === '1' || direction === 'asc' || direction === 'ascending' ? 1 : -1;
+          results.sort((a, b) => {
+            const aVal = a[field] || a.createdAt;
+            const bVal = b[field] || b.createdAt;
+            if (aVal < bVal) return -1 * dir;
+            if (aVal > bVal) return 1 * dir;
+            return 0;
+          });
+        }
+        return results;
+      },
+      sort(sortObj) {
+        // Converte { createdAt: -1 } in "createdAt -1"
+        const keys = Object.keys(sortObj);
+        if (keys.length > 0) {
+          this._sort = `${keys[0]} ${sortObj[keys[0]]}`;
+        }
+        return this;
+      },
+      // Per compatibilità, se chiamato direttamente con await
+      then: async function(resolve, reject) {
+        try {
+          const results = await this.exec();
+          return resolve(results);
+        } catch (error) {
+          return reject(error);
+        }
+      },
+      catch: function(reject) {
+        return this.then(null, reject);
+      }
+    };
+    return queryObj;
+  };
+  
+  Filter.findOne = function(query) {
+    return getMemoryStorage().findOneFilter(query);
+  };
+  
+  Filter.findById = function(id) {
+    return getMemoryStorage().findFilterById(id);
+  };
+  
+  Filter.findByIdAndUpdate = async function(id, updateData, options = {}) {
+    const storage = getMemoryStorage();
+    const updated = await storage.updateFilter(id, updateData);
+    // Se { new: true }, restituisce il documento aggiornato
+    if (options.new && updated) {
+      return updated;
+    }
+    return updated;
+  };
+  
+  Filter.getActiveFilters = function() {
+    return getMemoryStorage().getActiveFilters();
+  };
+  
+  module.exports = Filter;
+} else {
+  module.exports = FilterModel;
+}
 
 
 
