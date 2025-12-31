@@ -92,18 +92,52 @@ class WhatsappWebService {
       
       const puppeteerArgs = [...baseArgs, ...cloudArgs];
       
+      // Configurazione Puppeteer
+      const puppeteerConfig = {
+        headless: true,
+        args: puppeteerArgs
+      };
+      
+      // Su Render, configura il percorso del browser e la cache
       if (isCloudEnvironment) {
         console.log('☁️ Configurazione Puppeteer per ambiente cloud');
+        const fs = require('fs');
+        const path = require('path');
+        
+        try {
+          const puppeteer = require('puppeteer');
+          // Ottieni il percorso del browser installato da puppeteer
+          const executablePath = puppeteer.executablePath();
+          if (executablePath && fs.existsSync(executablePath)) {
+            puppeteerConfig.executablePath = executablePath;
+            console.log(`✅ Chrome trovato in: ${executablePath}`);
+          } else {
+            console.log(`⚠️ Chrome non trovato in: ${executablePath}`);
+            // Prova percorsi alternativi comuni su Render
+            const possiblePaths = [
+              process.env.PUPPETEER_EXECUTABLE_PATH,
+              '/opt/render/.cache/puppeteer/chrome/linux-*/chrome-linux/chrome',
+              path.join(process.env.HOME || '/opt/render', '.cache/puppeteer/chrome')
+            ].filter(Boolean);
+            
+            for (const possiblePath of possiblePaths) {
+              if (fs.existsSync(possiblePath)) {
+                puppeteerConfig.executablePath = possiblePath;
+                console.log(`✅ Chrome trovato in percorso alternativo: ${possiblePath}`);
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          console.log('⚠️ Impossibile ottenere il percorso di Chrome da puppeteer:', error.message);
+        }
       } else {
         console.log('💻 Configurazione Puppeteer per ambiente locale');
       }
       
       this.client = new Client({
         authStrategy: new LocalAuth(),
-        puppeteer: {
-          headless: true,
-          args: puppeteerArgs
-        }
+        puppeteer: puppeteerConfig
       });
 
       this.setupEventListeners();
