@@ -34,7 +34,6 @@
     "moment": "^2.29.4",
     "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
-    "@puppeteer/browsers": "^3.0.0",
     "puppeteer": "^23.0.0",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.34.2"
