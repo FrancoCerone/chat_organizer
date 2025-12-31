@@ -71,11 +71,38 @@ class WhatsappWebService {
     try {
       console.log('🚀 Inizializzazione WhatsApp Web.js...');
       
+      // Determina se siamo su Render o in un ambiente cloud
+      const isCloudEnvironment = process.env.RENDER || process.env.NODE_ENV === 'production';
+      
+      // Argomenti base per tutti gli ambienti
+      const baseArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox'
+      ];
+      
+      // Argomenti aggiuntivi solo per ambienti cloud (Render, etc.)
+      const cloudArgs = isCloudEnvironment ? [
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ] : [];
+      
+      const puppeteerArgs = [...baseArgs, ...cloudArgs];
+      
+      if (isCloudEnvironment) {
+        console.log('☁️ Configurazione Puppeteer per ambiente cloud');
+      } else {
+        console.log('💻 Configurazione Puppeteer per ambiente locale');
+      }
+      
       this.client = new Client({
         authStrategy: new LocalAuth(),
         puppeteer: {
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
+          args: puppeteerArgs
         }
       });
 
