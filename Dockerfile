@@ -1,7 +1,8 @@
 # Dockerfile per Chat Organizer
 # Applicazione Node.js con WhatsApp Web.js e Puppeteer
 
-FROM node:18-slim
+FROM node:18-bullseye
+
 
 # Metadati
 LABEL maintainer="Franco"

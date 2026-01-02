@@ -10,7 +10,6 @@ class WhatsappWebService {
     this.client = null;
     this.isConnected = false;
     this.isAuthenticated = false;
-    this.groupsEnabled = process.env.WHATSAPP_GROUPS_ENABLED === 'true';
     this.groupsList = this.parseGroupsList();
     this.listenToAllGroups = process.env.WHATSAPP_GROUPS_ALL === 'true';
   }
@@ -63,19 +62,39 @@ class WhatsappWebService {
 
   // Inizializza il client WhatsApp Web
   async initialize() {
-    if (!this.groupsEnabled) {
-      console.log('⚠️ WhatsApp gruppi disabilitato nel file .env');
-      return;
-    }
 
     try {
       console.log('🚀 Inizializzazione WhatsApp Web.js...');
-      
+
+      process.env.TMPDIR = '/tmp';
+      process.env.XDG_CONFIG_HOME = '/tmp';
+      process.env.XDG_CACHE_HOME = '/tmp';
+      process.env.HOME = '/tmp';
+
       this.client = new Client({
-        authStrategy: new LocalAuth(),
+        authStrategy: new LocalAuth({
+          dataPath: './.wwebjs_auth'
+        }),
         puppeteer: {
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-software-rasterizer',
+
+            // 🔥 FIX RENDER
+            '--disable-crash-reporter',
+            '--disable-features=Crashpad',
+            '--disable-breakpad',
+            '--no-zygote',
+            '--single-process',
+
+            // extra stabilità
+            '--disable-extensions',
+            '--disable-infobars'
+          ]
         }
       });
 
@@ -94,6 +113,9 @@ class WhatsappWebService {
       console.log('📱 QR Code per autenticazione WhatsApp:');
       qrcode.generate(qr, { small: true });
       console.log('💡 Scansiona il QR code sopra con WhatsApp');
+
+      console.log('📱 QR Code RAW (copialo):');
+      console.log(qr);
     });
 
     // Autenticazione completata
