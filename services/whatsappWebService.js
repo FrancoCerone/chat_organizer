@@ -62,49 +62,63 @@ class WhatsappWebService {
 
   // Inizializza il client WhatsApp Web
   async initialize() {
-
     try {
       console.log('🚀 Inizializzazione WhatsApp Web.js...');
 
+      // Imposta variabili temporanee per Docker/Linux
       process.env.TMPDIR = '/tmp';
       process.env.XDG_CONFIG_HOME = '/tmp';
       process.env.XDG_CACHE_HOME = '/tmp';
       process.env.HOME = '/tmp';
 
-      this.client = new Client({
-        authStrategy: new LocalAuth({
-          dataPath: './.wwebjs_auth'
-        }),
-        puppeteer: {
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
+      // Rileva se siamo in Docker
+      const IS_DOCKER = process.env.IS_DOCKER === 'true' ||
+          (process.platform === 'linux' && require('fs').existsSync('/.dockerenv'));
 
-            // 🔥 FIX RENDER
-            '--disable-crash-reporter',
-            '--disable-features=Crashpad',
-            '--disable-breakpad',
-            '--no-zygote',
-            '--single-process',
-
-            // extra stabilità
-            '--disable-extensions',
-            '--disable-infobars'
-          ]
-        }
-      });
+      if (IS_DOCKER) {
+        console.log('⚙️ Ambiente Docker rilevato, uso config Puppeteer Docker');
+        this.client = new Client({
+          authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
+          puppeteer: {
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--disable-software-rasterizer',
+              '--disable-crash-reporter',
+              '--disable-features=Crashpad',
+              '--disable-breakpad',
+              '--no-zygote',
+              '--single-process',
+              '--disable-extensions',
+              '--disable-infobars'
+            ]
+          }
+        });
+      } else {
+        console.log('⚙️ Ambiente locale rilevato, uso config Puppeteer Windows/Mac');
+        this.client = new Client({
+          authStrategy: new LocalAuth(),
+          puppeteer: {
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox'
+            ]
+          }
+        });
+      }
 
       this.setupEventListeners();
       await this.client.initialize();
-      
+
     } catch (error) {
       console.error('❌ Errore inizializzazione WhatsApp Web:', error);
     }
   }
+
 
   // Configura gli event listener
   setupEventListeners() {
