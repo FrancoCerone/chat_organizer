@@ -254,7 +254,7 @@ class WhatsappWebService {
       }
 
       const groupName = messageData.metadata?.groupInfo?.name || 'Sconosciuto';
-      console.log(`🔍 Processando messaggio da gruppo "${groupName}" da ${normalizedMessage.from.name}`);
+      console.log(`🔍 Processando messaggio da "${groupName}" da ${normalizedMessage.from.name}`);
       
       // Salva il messaggio nel database per compatibilità con executeFilterActions
       const USE_MEMORY_STORAGE = process.env.USE_MEMORY_STORAGE === 'true';

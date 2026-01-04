@@ -103,10 +103,26 @@ class FilterService {
 
       // Controllo unicità messaggi (uniqueText)
       if (filter.uniqueText && filter.uniqueText.enabled) {
-        const isUnique = await this.checkMessageUniqueness(messageData, filter);
-        if (!isUnique) {
-          console.log(`⚠️ Messaggio duplicato rilevato - tag: ${filter.uniqueText.tag}`);
+        // Verifica che messageData.content esista e che text sia una stringa valida
+        // Gestisce null, undefined, stringa vuota e stringhe con solo spazi
+        const hasValidText = messageData?.content?.text && 
+                             typeof messageData.content.text === 'string' && 
+                             messageData.content.text.trim().length > 0;
+        
+        // Se il testo non è valido, salta il controllo di unicità
+        // (considera il messaggio come valido per non bloccare messaggi senza testo)
+        if (!hasValidText) {
+          console.log('ℹ️ Messaggio senza testo valido, controllo unicità saltato');
           return false;
+          // Continua con il resto del filtro (non bloccare il messaggio)
+        } else {
+          // Il testo è valido, controlla l'unicità
+          const isUnique = await this.checkMessageUniqueness(messageData, filter);
+          
+          if (!isUnique) {
+            console.log(`⚠️ Messaggio duplicato rilevato - tag: ${filter.uniqueText.tag || 'N/A'}`);
+            return false;
+          }
         }
       }
 
@@ -236,11 +252,30 @@ class FilterService {
         console.log(`📤 Sent to separate chat via filter: ${result.filterName}`);
       }
       // Altrimenti usa il sistema legacy di forwardTo (senza duplicare se chat separata è attiva)
+      // I numeri vengono recuperati dall'environment invece di essere cablati nel codice
       if (actions.forwardTo && actions.forwardTo.length > 0) {
-        for (const phone of actions.forwardTo) {
+        // Recupera i numeri dall'environment (separati da virgola)
+        const forwardNumbersEnv = process.env.FORWARD_TO_NUMBERS;
+        let phonesToForward = [];
+        
+        if (forwardNumbersEnv) {
+          // Parsing della lista di numeri dall'environment
+          phonesToForward = forwardNumbersEnv
+            .split(',')
+            .map(phone => phone.trim())
+            .filter(phone => phone.length > 0);
+        }
+        
+        // Se non ci sono numeri nell'environment, usa quelli dal filtro come fallback
+        if (phonesToForward.length === 0) {
+          phonesToForward = actions.forwardTo;
+          console.log('⚠️ FORWARD_TO_NUMBERS non configurato, uso numeri dal filtro');
+        }
+        
+        // Inoltra ai numeri configurati
+        for (const phone of phonesToForward) {
           try {
-            await whatsappService.forwardText(message, phone,
-                result.filterName);
+            await whatsappService.forwardText(message, phone, result.filterName);
             console.log(`📤 Forwarded via WhatsApp to ${phone}`);
           } catch (fwdErr) {
             console.error('Error forwarding via WhatsApp:',
@@ -279,8 +314,28 @@ class FilterService {
       }
       
       // Altrimenti usa il sistema legacy di forwardTo (senza duplicare se chat separata è attiva)
+      // I numeri vengono recuperati dall'environment invece di essere cablati nel codice
       if (actions.forwardTo && actions.forwardTo.length > 0) {
-        for (const phone of actions.forwardTo) {
+        // Recupera i numeri dall'environment (separati da virgola)
+        const forwardNumbersEnv = process.env.FORWARD_TO_NUMBERS;
+        let phonesToForward = [];
+        
+        if (forwardNumbersEnv) {
+          // Parsing della lista di numeri dall'environment
+          phonesToForward = forwardNumbersEnv
+            .split(',')
+            .map(phone => phone.trim())
+            .filter(phone => phone.length > 0);
+        }
+        
+        // Se non ci sono numeri nell'environment, usa quelli dal filtro come fallback
+        if (phonesToForward.length === 0) {
+          phonesToForward = actions.forwardTo;
+          console.log('⚠️ FORWARD_TO_NUMBERS non configurato, uso numeri dal filtro');
+        }
+        
+        // Inoltra ai numeri configurati
+        for (const phone of phonesToForward) {
           try {
             await whatsappWebService.forwardText(message, phone, result.filterName);
             console.log(`📤 Forwarded via WhatsApp Web to ${phone}`);
