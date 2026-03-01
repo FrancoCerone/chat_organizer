@@ -833,7 +833,7 @@ const setupFilters = async () => {
             enabled: true
           },
           actions: {
-            forwardTo: ['393476835437'],
+            forwardTo: [''],
           }
 
         }
