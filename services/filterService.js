@@ -14,7 +14,6 @@ class FilterService {
   async loadFilters() {
     try {
       this.filters = await Filter.getActiveFilters();
-      console.log(`🔍 Loaded ${this.filters.length} active filters`);
     } catch (error) {
       console.error('Error loading filters:', error);
     }
@@ -269,7 +268,6 @@ class FilterService {
         // Se non ci sono numeri nell'environment, usa quelli dal filtro come fallback
         if (phonesToForward.length === 0) {
           phonesToForward = actions.forwardTo;
-          console.log('⚠️ FORWARD_TO_NUMBERS non configurato, uso numeri dal filtro');
         }
         
         // Inoltra ai numeri configurati
@@ -824,7 +822,6 @@ const setupFilters = async () => {
       defaultFilters = [
         {
           name: 'Raggruppa-Diversi',
-          description: 'Raggruppa-Diversi',
           actions: {
             addTags: ['raggruppa-Diversi']
           },

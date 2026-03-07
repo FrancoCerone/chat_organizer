@@ -10,8 +10,29 @@ class WhatsappWebService {
     this.client = null;
     this.isConnected = false;
     this.isAuthenticated = false;
+    this.qrCount = 0;
+    this.authEventCount = 0;
+    this.initializeCount = 0;
+    this.isInitializing = false;
+    this.initRetryCount = 0;
+    this.maxInitRetries = 3;
     this.groupsList = this.parseGroupsList();
     this.listenToAllGroups = process.env.WHATSAPP_GROUPS_ALL === 'true';
+  }
+
+  isTransientPuppeteerInitError(error) {
+    const message = (error && error.message ? error.message : '').toLowerCase();
+    return (
+      message.includes('execution context was destroyed') ||
+      message.includes('target closed') ||
+      message.includes('navigating frame was detached') ||
+      message.includes('session closed')
+    );
+  }
+
+  getRetryDelayMs() {
+    // Backoff semplice: 2s, 4s, 6s
+    return Math.min((this.initRetryCount + 1) * 2000, 6000);
   }
 
   // Parsing della lista gruppi dal file .env
@@ -62,14 +83,19 @@ class WhatsappWebService {
 
   // Inizializza il client WhatsApp Web
   async initialize() {
+    let shouldRetry = false;
+    let retryDelayMs = 0;
     try {
+      this.initializeCount += 1;
+      if (this.isInitializing) {
+        console.log(`⚠️ initialize() già in corso (call #${this.initializeCount}, pid=${process.pid}), skip`);
+        return;
+      }
+      this.isInitializing = true;
       console.log('🚀 Inizializzazione WhatsApp Web.js...');
+      console.log(`🧪 Debug init call #${this.initializeCount} (pid=${process.pid})`);
 
-      // Imposta variabili temporanee per Docker/Linux
-      process.env.TMPDIR = '/tmp';
-      process.env.XDG_CONFIG_HOME = '/tmp';
-      process.env.XDG_CACHE_HOME = '/tmp';
-      process.env.HOME = '/tmp';
+
 
       // Rileva se siamo in Docker
       const IS_DOCKER = process.env.IS_DOCKER === 'true' ||
@@ -77,6 +103,13 @@ class WhatsappWebService {
 
       if (IS_DOCKER) {
         console.log('⚙️ Ambiente Docker rilevato, uso config Puppeteer Docker');
+        // Imposta variabili temporanee per Docker/Linux
+        process.env.TMPDIR = '/tmp';
+        process.env.XDG_CONFIG_HOME = '/tmp';
+        process.env.XDG_CACHE_HOME = '/tmp';
+        process.env.HOME = '/tmp';
+
+
         this.client = new Client({
           authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
           puppeteer: {
@@ -113,9 +146,40 @@ class WhatsappWebService {
 
       this.setupEventListeners();
       await this.client.initialize();
+      this.initRetryCount = 0;
 
     } catch (error) {
       console.error('❌ Errore inizializzazione WhatsApp Web:', error);
+      const isTransient = this.isTransientPuppeteerInitError(error);
+      if (isTransient && this.initRetryCount < this.maxInitRetries) {
+        this.initRetryCount += 1;
+        retryDelayMs = this.getRetryDelayMs();
+        shouldRetry = true;
+        console.log(
+          `♻️ Errore transient Puppeteer rilevato, retry ${this.initRetryCount}/${this.maxInitRetries} tra ${retryDelayMs}ms`
+        );
+      } else if (isTransient) {
+        console.error('🛑 Raggiunto numero massimo retry inizializzazione WhatsApp Web');
+      }
+
+      if (this.client) {
+        try {
+          await this.client.destroy();
+        } catch (destroyError) {
+          console.log('ℹ️ destroy client fallito/già chiuso:', destroyError.message);
+        } finally {
+          this.client = null;
+        }
+      }
+    } finally {
+      this.isInitializing = false;
+      if (shouldRetry) {
+        setTimeout(() => {
+          this.initialize().catch((retryError) => {
+            console.error('❌ Retry initialize() fallito:', retryError);
+          });
+        }, retryDelayMs);
+      }
     }
   }
 
@@ -124,7 +188,9 @@ class WhatsappWebService {
   setupEventListeners() {
     // QR Code per autenticazione
     this.client.on('qr', (qr) => {
+      this.qrCount += 1;
       console.log('📱 QR Code per autenticazione WhatsApp:');
+      console.log(`🔁 QR generato #${this.qrCount}`);
       qrcode.generate(qr, { small: true });
       console.log('💡 Scansiona il QR code sopra con WhatsApp');
 
@@ -132,11 +198,35 @@ class WhatsappWebService {
       console.log(qr);
     });
 
+    // Sessione autenticata (prima del ready)
+    this.client.on('authenticated', () => {
+      this.authEventCount += 1;
+      if (this.isAuthenticated) {
+        console.log(`⚠️ Evento authenticated duplicato ignorato (#${this.authEventCount}, pid=${process.pid})`);
+        return;
+      }
+      console.log(`🔐 Evento authenticated ricevuto (#${this.authEventCount}, pid=${process.pid})`);
+      this.isAuthenticated = true;
+    });
+
+    // Stato interno del client WhatsApp Web
+    this.client.on('change_state', (state) => {
+      console.log(`🧭 Stato client WhatsApp cambiato: ${state}`);
+    });
+
+    // Progresso caricamento interfaccia WhatsApp Web
+    this.client.on('loading_screen', (percent, message) => {
+      const safePercent = Number.isFinite(percent) ? `${percent}%` : 'n/a';
+      console.log(`⏳ Loading WhatsApp Web: ${safePercent} - ${message || 'n/a'}`);
+    });
+
     // Autenticazione completata
     this.client.on('ready', () => {
       console.log('✅ WhatsApp Web.js autenticato e pronto!');
       this.isConnected = true;
       this.isAuthenticated = true;
+      this.qrCount = 0;
+      this.authEventCount = 0;
       this.logGroupsInfo();
     });
 
@@ -214,8 +304,6 @@ class WhatsappWebService {
         return;
       }
 
-      console.log(`📨 Messaggio da "${chat.name}" da ${contact.name || contact.number}`);
-
       // Converte il messaggio nel formato standard
       const standardMessage = await this.convertToStandardMessage(message, chat, contact);
       
@@ -254,8 +342,7 @@ class WhatsappWebService {
       }
 
       const groupName = messageData.metadata?.groupInfo?.name || 'Sconosciuto';
-      console.log(`🔍 Processando messaggio da "${groupName}" da ${normalizedMessage.from.name}`);
-      
+
       // Salva il messaggio nel database per compatibilità con executeFilterActions
       const USE_MEMORY_STORAGE = process.env.USE_MEMORY_STORAGE === 'true';
       let message;
@@ -446,15 +533,7 @@ class WhatsappWebService {
     return this.forwardText(originalMessage, separateChatNumber, filterName);
   }
 
-  // Disconnette il client
-  async disconnect() {
-    if (this.client) {
-      await this.client.destroy();
-      this.isConnected = false;
-      this.isAuthenticated = false;
-      console.log('🔌 WhatsApp Web disconnesso');
-    }
-  }
+
 
   // Stato del servizio
   getStatus() {
