@@ -13,11 +13,11 @@ const filterSchema = new mongoose.Schema({
   description: String,
   
   // Filtri per autore
-  authors: [{
-    phoneNumber: String,
-    name: String
-  }],
-  
+  authors: [String],
+
+  // Filtri per gruppo
+  sourceGroups: [String],
+
   // Parole chiave da cercare nel testo
   keywords: [String],
   

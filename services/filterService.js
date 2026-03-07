@@ -45,11 +45,17 @@ class FilterService {
     try {
       // Controllo autore
       if (filter.authors && filter.authors.length > 0) {
-        const authorMatch = filter.authors.some(author => 
-          author.phoneNumber === messageData.from.phoneNumber ||
-          author.name === messageData.from.name
+        const authorMatch = filter.authors.some(author =>
+            messageData.from.phoneNumber.includes(author.phoneNumber)
         );
         if (!authorMatch) return false;
+      }
+
+      if (filter.sourceGroups && filter.sourceGroups.length > 0) {
+        const sourceGroupsMatch = filter.sourceGroups.some(sourceGroups =>
+            messageData.metadata.groupInfo.name === sourceGroups
+        );
+        if (!sourceGroupsMatch) return false;
       }
 
       // Controllo parole chiave
@@ -821,16 +827,20 @@ const setupFilters = async () => {
       // Filtri predefiniti hardcoded
       defaultFilters = [
         {
-          name: 'Raggruppa-Diversi',
+          name: 'Messagio non duplicato',
+          description: 'i nuovi messaggi  vengono inoltrati in un numero separato, con: sourceGroups è possibile specificare quali gruppi o numeri attenzionare',
+          authors: [],
+          sourceGroups: ['G1'],
           actions: {
-            addTags: ['raggruppa-Diversi']
+            addTags: ['Messagio non duplicato']
           },
+          timeWindowSeconds: 10,
           enabled: true,
           uniqueText: {
             enabled: true
           },
           actions: {
-            forwardTo: [''],
+            forwardTo: ['+393476835437'],
           }
 
         }
