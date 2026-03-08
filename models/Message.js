@@ -89,6 +89,10 @@ const messageSchema = new mongoose.Schema({
       enum: ['low', 'medium', 'high', 'urgent'],
       default: 'medium'
     },
+    groupInfo:{
+      name: String,
+
+    },
     tags: [String],
     notes: String
   },
