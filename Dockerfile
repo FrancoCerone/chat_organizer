@@ -69,16 +69,18 @@ COPY package*.json ./
 RUN npm install --omit=dev && \
     npm cache clean --force
 
-# Installa Chrome per Puppeteer usando @puppeteer/browsers
-# Questo è necessario perché whatsapp-web.js usa puppeteer-core che non include Chrome
-# Installa la versione specifica richiesta da Puppeteer (143.0.7499.169)
+# Installa Chrome per Puppeteer usando la versione richiesta dal puppeteer-core installato
+# Questo evita mismatch tipo "Could not find Chrome (ver. X.Y.Z)"
 RUN mkdir -p /home/appuser/.cache/puppeteer && \
     chown -R appuser:appuser /home/appuser/.cache && \
-    npx -y @puppeteer/browsers@latest install chrome@143.0.7499.169 --path=/home/appuser/.cache/puppeteer && \
+    CHROME_VERSION=$(node -e "const { PUPPETEER_REVISIONS } = require('puppeteer-core/lib/cjs/puppeteer/revisions.js'); process.stdout.write(PUPPETEER_REVISIONS.chrome);") && \
+    echo "🔎 Chrome richiesto da puppeteer-core: ${CHROME_VERSION}" && \
+    npx -y @puppeteer/browsers@latest install chrome@${CHROME_VERSION} --path=/home/appuser/.cache/puppeteer && \
     chown -R appuser:appuser /home/appuser/.cache || \
     (echo "⚠️ Installazione Chrome fallita, provo metodo alternativo..." && \
+     CHROME_VERSION=$(node -e "const { PUPPETEER_REVISIONS } = require('puppeteer-core/lib/cjs/puppeteer/revisions.js'); process.stdout.write(PUPPETEER_REVISIONS.chrome);") && \
      PUPPETEER_CACHE_DIR=/home/appuser/.cache/puppeteer \
-     npx -y @puppeteer/browsers@latest install chrome@143.0.7499.169 && \
+     npx -y @puppeteer/browsers@latest install chrome@${CHROME_VERSION} && \
      chown -R appuser:appuser /home/appuser/.cache) || \
     (echo "⚠️ Installazione Chrome fallita, continuo comunque" && exit 0)
 

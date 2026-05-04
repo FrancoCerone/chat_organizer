@@ -66,10 +66,12 @@ pids
 .tmp
 *.tmp
 
-# Sessioni WhatsApp (verranno create a runtime o montate come volume)
-# Mantieni la struttura ma non i contenuti
-.wwebjs_auth/session
-.wwebjs_cache/*.html
+# Sessioni WhatsApp: montate come volumi in docker-compose; non includerle nel contesto
+# (altrimenti ~100MB+ di profilo Chrome rallentano o fanno fallire "load build context")
+.wwebjs_auth
+.wwebjs_cache
+wwebjs_auth
+wwebjs_cache
 
 # Docker files (non necessari nell'immagine)
 Dockerfile
