@@ -830,7 +830,7 @@ const setupFilters = async () => {
           name: 'Messagio non duplicato',
           description: 'i nuovi messaggi  vengono inoltrati in un numero separato, con: sourceGroups è possibile specificare quali gruppi o numeri attenzionare',
           authors: [],
-          sourceGroups: ['G1'],
+          sourceGroups: ['NLF Lì-gue'],
           actions: {
             addTags: ['Messagio non duplicato']
           },
@@ -840,7 +840,7 @@ const setupFilters = async () => {
             enabled: true
           },
           actions: {
-            forwardTo: ['+393495421378'],
+            forwardTo: ['+393203591619'],
           }
 
         }
