@@ -152,3 +152,13 @@ I filtri predefiniti includono:
 ## Licenza
 
 MIT
+
+per riavviarlo nel VPS 
+
+docker stop chat_organizer_app   chat_organizer_mongo_express chat_organizer_mongodb
+docker rm chat_organizer_app   chat_organizer_mongo_express chat_organizer_mongodb
+rm -rf  wwebjs_auth  wwebjs_cache
+docker compose up -d --build
+docker stop chat_organizer_app
+sudo chmod -R 777 wwebjs_auth  wwebjs_cache
+docker restart chat_organizer_app
