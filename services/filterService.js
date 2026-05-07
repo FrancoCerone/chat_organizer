@@ -1,7 +1,6 @@
 const Filter = require('../models/Filter');
 const Message = require('../models/Message');
 const moment = require('moment');
-const whatsappService = require('./whatsappService');
 const MessageConverter = require('./messageConverter');
 
 class FilterService {
@@ -411,25 +410,29 @@ class FilterService {
   // Parsifica comando di aggiornamento filtro
   parseFilterUpdateCommand(messageText) {
     try {
-      // Formato: "update filter <filter_name> <field> <value>"
-      // Usa un regex più robusto che gestisce spazi nel nome del filtro e valori complessi
-      const updatePattern = /update\s+filter\s+([^\s]+(?:\s+[^\s]+)*?)\s+([^\s]+)\s+(.+)/i;
+      // Formati supportati:
+      // 1) "update filter <filter_name> <field> <value>"
+      // 2) "update filter <filter_name> sourcegroups add <value>"
+      // 3) "update filter <filter_name> sourcegroups remove <value>"
+      const updatePattern = /update\s+filter\s+(.+?)\s+([^\s]+)(?:\s+(add|remove))?\s+(.+)/i;
       const match = messageText.match(updatePattern);
       
       if (!match) {
         return null;
       }
 
-      let [, filterName, field, value] = match;
+      let [, filterName, field, operation, value] = match;
       
       // Pulisce i valori
       filterName = filterName.trim();
       field = field.trim().toLowerCase();
+      operation = operation ? operation.trim().toLowerCase() : null;
       value = value.trim();
 
       return {
         filterName: filterName,
         field: field,
+        operation: operation,
         value: value,
         isValid: true
       };
@@ -468,6 +471,11 @@ class FilterService {
         return await this.sendFilterList(messageData.from.phoneNumber, whatsappWebService);
       }
 
+      // Comando dettaglio filtro singolo
+      if (text.startsWith('get filter ') || (text.startsWith('show filter ') && !text.includes('show filters'))) {
+        return await this.sendSingleFilterDetails(messageData, whatsappWebService);
+      }
+
       // Comando aggiorna filtro
       if (text.includes('update filter')) {
         return await this.updateFilterByCommand(messageData, whatsappWebService);
@@ -491,19 +499,33 @@ class FilterService {
 
 📋 **Filter Management:**
 • \`list filters\` or \`show filters\` - Show all active filters
+• \`get filter <name>\` - Show one specific filter
 • \`update filter <name> <field> <value>\` - Update a filter
+• \`update filter <name> sourcegroups add <group>\` - Add one source group
+• \`update filter <name> sourcegroups remove <group>\` - Remove one source group
 
 **Available filter fields:**
 • \`keywords\` - Keywords (JSON array or string)
 • \`keywordmatchmode\` - Keyword matching mode (AND or OR)
 • \`authors\` - Authors (JSON array or phone number)
+• \`sourcegroups\` - Source groups (JSON array or string)
 • \`messagetypes\` - Message types (JSON array)
+• \`timewindowseconds\` - Unique text window in seconds (number)
+• \`forwardTo\` - Forward destination numbers (JSON array or string)
 • \`priority\` - Priority (urgent, high, normal, low)
 • \`important\` - Mark as important (true/false)
 • \`archive\` - Archive (true/false)
 • \`active\` - Active status (true/false)
 
 **Command examples:**
+\`get filter Urgent Messages\`
+\`update filter Urgent Messages sourcegroups ["Gruppo A","Gruppo B"]\`
+\`update filter Urgent Messages sourcegroups add "Gruppo C"\`
+\`update filter Urgent Messages sourcegroups remove "Gruppo A"\`
+\`update filter Urgent Messages timewindowseconds 120\`
+\`update filter Urgent Messages forwardTo ["+393331112233","+393339998877"]\`
+\`update filter Urgent Messages forwardTo add "+393331112233"\`
+\`update filter Urgent Messages forwardTo remove "+393331112233"\`
 \`update filter Urgent Messages keywords ["urgent","emergency"]\`
 \`update filter Urgent Messages keywordmatchmode AND\`
 \`update filter Urgent Messages priority urgent\`
@@ -534,20 +556,36 @@ class FilterService {
 📋 **List filters:**
 \`list filters\` or \`show filters\`
 
+🔎 **Get one filter:**
+\`get filter <name>\` (or \`show filter <name>\`)
+
 📝 **Update filter:**
 \`update filter <name> <field> <value>\`
+\`update filter <name> sourcegroups add <group>\`
+\`update filter <name> sourcegroups remove <group>\`
 
 **Available fields:**
 • \`keywords\` - Keywords (JSON array or string)
 • \`keywordmatchmode\` - Keyword matching mode (AND or OR)
 • \`authors\` - Authors (JSON array or phone number)
+• \`sourcegroups\` - Source groups (JSON array or string)
 • \`messagetypes\` - Message types (JSON array)
+• \`timewindowseconds\` - Unique text window in seconds (number)
+• \`forwardTo\` - Forward destination numbers (JSON array or string)
 • \`priority\` - Priority (urgent, high, normal, low)
 • \`important\` - Mark as important (true/false)
 • \`archive\` - Archive (true/false)
 • \`active\` - Active status (true/false)
 
 **Examples:**
+\`get filter Urgent Messages\`
+\`update filter Urgent Messages sourcegroups ["Gruppo A","Gruppo B"]\`
+\`update filter Urgent Messages sourcegroups add "Gruppo C"\`
+\`update filter Urgent Messages sourcegroups remove "Gruppo A"\`
+\`update filter Urgent Messages timewindowseconds 120\`
+\`update filter Urgent Messages forwardTo ["+393331112233","+393339998877"]\`
+\`update filter Urgent Messages forwardTo add "+393331112233"\`
+\`update filter Urgent Messages forwardTo remove "+393331112233"\`
 \`update filter Urgent Messages keywords ["urgent","emergency"]\`
 \`update filter Urgent Messages keywordmatchmode AND\`
 \`update filter Urgent Messages priority urgent\`
@@ -608,6 +646,61 @@ class FilterService {
     }
   }
 
+  // Invia dettaglio di un filtro specifico
+  async sendSingleFilterDetails(messageData, whatsappWebService) {
+    try {
+      const rawText = (messageData.content?.text || '').trim();
+      const match = rawText.match(/^(?:get|show)\s+filter\s+(.+)$/i);
+
+      if (!match || !match[1]) {
+        return { success: false, message: 'Invalid command format. Use: "get filter <name>"' };
+      }
+
+      const filterName = match[1].trim();
+      const filter = await Filter.findOne({ name: filterName });
+
+      if (!filter) {
+        return { success: false, message: `Filter "${filterName}" not found` };
+      }
+
+      const filterJson = JSON.stringify(filter.toObject(), null, 2);
+
+      const details = [
+        `🔎 **FILTER DETAILS: ${filter.name}**`,
+        '',
+        `📝 Description: ${filter.description || 'No description'}`,
+        `⚡ Enabled: ${filter.enabled ? 'Yes' : 'No'}`,
+        `🔍 Keywords: ${filter.keywords && filter.keywords.length > 0 ? filter.keywords.join(', ') : 'None'}`,
+        `🧩 Keyword mode: ${filter.keywordMatchMode || 'OR'}`,
+        `👤 Authors: ${filter.authors && filter.authors.length > 0 ? filter.authors.map(a => a.phoneNumber || a.name).join(', ') : 'None'}`,
+        `💬 Message types: ${filter.messageTypes && filter.messageTypes.length > 0 ? filter.messageTypes.join(', ') : 'None'}`,
+        `🏷️ Priority action: ${filter.actions?.setPriority || 'None'}`,
+        `⭐ Mark important: ${filter.actions?.markAsImportant ? 'Yes' : 'No'}`,
+        `🗃️ Archive: ${filter.actions?.archive ? 'Yes' : 'No'}`,
+        '',
+        '🧾 Full JSON:',
+        '```json',
+        filterJson,
+        '```'
+      ].join('\n');
+
+      if (whatsappWebService && whatsappWebService.isAuthenticated) {
+        try {
+          await whatsappWebService.sendMessageToNumber(messageData.from.phoneNumber, details);
+          return { success: true, message: `Dettaglio filtro "${filterName}" inviato` };
+        } catch (sendError) {
+          console.error('Error sending single filter details:', sendError);
+          return { success: false, message: 'Errore invio dettaglio filtro' };
+        }
+      }
+
+      return { success: true, message: details };
+    } catch (error) {
+      console.error('Error getting single filter details:', error);
+      return { success: false, message: 'Errore recupero dettaglio filtro' };
+    }
+  }
+
   // Aggiorna un filtro tramite comando
   async updateFilterByCommand(messageData, whatsappWebService = null) {
     try {
@@ -632,13 +725,14 @@ class FilterService {
       }
 
       // Aggiorna il campo specificato
-      let updateResult = await this.updateFilterField(filter._id, command.field, command.value);
+      let updateResult = await this.updateFilterField(filter._id, command.field, command.value, command.operation);
       
       if (updateResult.success) {
         // Invia conferma all'admin
         if (whatsappWebService && whatsappWebService.isAuthenticated) {
           const confirmMessage = `✅ Filter "${command.filterName}" updated!\n` +
                                `Field: ${command.field}\n` +
+                               `Operation: ${command.operation || 'set'}\n` +
                                `New value: ${command.value}`;
           
           try {
@@ -660,7 +754,7 @@ class FilterService {
   }
 
   // Aggiorna un campo specifico di un filtro
-  async updateFilterField(filterId, field, value) {
+  async updateFilterField(filterId, field, value, operation = null) {
     try {
       const filter = await Filter.findById(filterId);
       if (!filter) {
@@ -712,6 +806,51 @@ class FilterService {
             updateData.authors = [{ phoneNumber: value }];
           }
           break;
+
+        case 'sourcegroups':
+          try {
+            const normalizedValue = value.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+            const existingGroups = Array.isArray(filter.sourceGroups) ? [...filter.sourceGroups] : [];
+
+            if (operation === 'add') {
+              if (!existingGroups.includes(normalizedValue)) {
+                existingGroups.push(normalizedValue);
+              }
+              updateData.sourceGroups = existingGroups;
+            } else if (operation === 'remove') {
+              updateData.sourceGroups = existingGroups.filter(group => group !== normalizedValue);
+            } else {
+              // Se inizia con [ e finisce con ], è un array JSON
+              if (value.startsWith('[') && value.endsWith(']')) {
+                value = value.replace(/[“”]/g, '"');
+                const groups = JSON.parse(value);
+                if (Array.isArray(groups)) {
+                  updateData.sourceGroups = groups;
+                } else {
+                  updateData.sourceGroups = [value];
+                }
+              } else {
+                // Se non è un array JSON, tratta come stringa singola
+                updateData.sourceGroups = [normalizedValue];
+              }
+            }
+          } catch (parseError) {
+            console.log('⚠️ Errore parsing sourcegroups, usando come stringa singola:', parseError.message);
+            const fallbackValue = value.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+            if (operation === 'add') {
+              const existingGroups = Array.isArray(filter.sourceGroups) ? [...filter.sourceGroups] : [];
+              if (!existingGroups.includes(fallbackValue)) {
+                existingGroups.push(fallbackValue);
+              }
+              updateData.sourceGroups = existingGroups;
+            } else if (operation === 'remove') {
+              const existingGroups = Array.isArray(filter.sourceGroups) ? [...filter.sourceGroups] : [];
+              updateData.sourceGroups = existingGroups.filter(group => group !== fallbackValue);
+            } else {
+              updateData.sourceGroups = [fallbackValue];
+            }
+          }
+          break;
           
         case 'messagetypes':
           try {
@@ -755,6 +894,46 @@ class FilterService {
             updateData.keywordMatchMode = mode;
           } else {
             return { success: false, message: `Mode "${value}" is invalid. Use "AND" or "OR"` };
+          }
+          break;
+
+        case 'timewindowseconds':
+          {
+            const parsedValue = parseInt(value, 10);
+            if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+              return { success: false, message: `Value "${value}" is invalid. Use a positive integer (seconds)` };
+            }
+            updateData['uniqueText.timeWindowSeconds'] = parsedValue;
+          }
+          break;
+
+        case 'forwardto':
+          try {
+            const normalizedValue = value.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+            const existingForwardTo = Array.isArray(filter.actions?.forwardTo) ? [...filter.actions.forwardTo] : [];
+
+            if (operation === 'add') {
+              if (!existingForwardTo.includes(normalizedValue)) {
+                existingForwardTo.push(normalizedValue);
+              }
+              updateData['actions.forwardTo'] = existingForwardTo;
+            } else if (operation === 'remove') {
+              updateData['actions.forwardTo'] = existingForwardTo.filter(number => number !== normalizedValue);
+            } else if (value.startsWith('[') && value.endsWith(']')) {
+              value = value.replace(/[“”]/g, '"');
+              const numbers = JSON.parse(value);
+              if (Array.isArray(numbers)) {
+                updateData['actions.forwardTo'] = numbers;
+              } else {
+                updateData['actions.forwardTo'] = [normalizedValue];
+              }
+            } else {
+              updateData['actions.forwardTo'] = [normalizedValue];
+            }
+          } catch (parseError) {
+            console.log('⚠️ Errore parsing forwardto, usando come stringa singola:', parseError.message);
+            const fallbackValue = value.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+            updateData['actions.forwardTo'] = [fallbackValue];
           }
           break;
           
@@ -827,7 +1006,7 @@ const setupFilters = async () => {
       // Filtri predefiniti hardcoded
       defaultFilters = [
         {
-          name: 'Messagio non duplicato',
+          name: 'forward',
           description: 'i nuovi messaggi  vengono inoltrati in un numero separato, con: sourceGroups è possibile specificare quali gruppi o numeri attenzionare',
           authors: [],
           sourceGroups: ['NLF Lì-gue'],
@@ -840,7 +1019,7 @@ const setupFilters = async () => {
             enabled: true
           },
           actions: {
-            forwardTo: ['+393203591619'],
+            forwardTo: ['+393476835437'],
           }
 
         }

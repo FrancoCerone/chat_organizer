@@ -362,7 +362,9 @@ class WhatsappWebService {
                            text.includes('update filter') || 
                            text.includes('help filters') || 
                            text.includes('list filters') || 
-                           text.includes('show filters');
+                           text.includes('show filters') ||
+                           text.startsWith('get filter ') ||
+                           (text.startsWith('show filter ') && !text.includes('show filters'));
       
       if (isAdminCommand) {
         console.log('🔧 Rilevato comando admin');

@@ -3,7 +3,6 @@ const router = express.Router();
 const Message = require('../models/Message');
 const Filter = require('../models/Filter');
 const { FilterService } = require('../services/filterService');
-const whatsappService = require('../services/whatsappService');
 const whatsappWebService = require('../services/whatsappWebService');
 
 // ===== MESSAGGI =====
