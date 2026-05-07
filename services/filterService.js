@@ -407,6 +407,35 @@ class FilterService {
     return adminList.includes(cleanNumber);
   }
 
+  escapeRegex(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  // Trova un filtro per nome in modo case-insensitive
+  async findFilterByNameInsensitive(filterName) {
+    const normalizedFilterName = (filterName || '').trim();
+    if (!normalizedFilterName) {
+      return null;
+    }
+
+    // Tentativo principale: regex case-insensitive (MongoDB)
+    try {
+      const regex = new RegExp(`^${this.escapeRegex(normalizedFilterName)}$`, 'i');
+      const filterWithRegex = await Filter.findOne({ name: regex });
+      if (filterWithRegex) {
+        return filterWithRegex;
+      }
+    } catch (error) {
+      console.log('ℹ️ Ricerca regex filtro non supportata, fallback a ricerca manuale');
+    }
+
+    // Fallback compatibile con storage in memoria
+    const allFilters = await Filter.find({});
+    return allFilters.find((filter) =>
+      String(filter.name || '').trim().toLowerCase() === normalizedFilterName.toLowerCase()
+    ) || null;
+  }
+
   // Parsifica comando di aggiornamento filtro
   parseFilterUpdateCommand(messageText) {
     try {
@@ -657,7 +686,7 @@ class FilterService {
       }
 
       const filterName = match[1].trim();
-      const filter = await Filter.findOne({ name: filterName });
+      const filter = await this.findFilterByNameInsensitive(filterName);
 
       if (!filter) {
         return { success: false, message: `Filter "${filterName}" not found` };
@@ -719,7 +748,7 @@ class FilterService {
       });
 
       // Trova il filtro
-      const filter = await Filter.findOne({ name: command.filterName });
+      const filter = await this.findFilterByNameInsensitive(command.filterName);
       if (!filter) {
         return { success: false, message: `Filter "${command.filterName}" not found` };
       }
