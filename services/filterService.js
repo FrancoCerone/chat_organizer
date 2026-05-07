@@ -524,14 +524,18 @@ class FilterService {
 
 🔧 **General Commands:**
 • \`help\` - Show this message
-• \`help filters\` - Specific help for filters
+• \`help filters\` - Show detailed help for filter commands
 
 📋 **Filter Management:**
-• \`list filters\` or \`show filters\` - Show all active filters
+• \`list filters\` - Show all active filters
+• \`show filters\` - Alias of \`list filters\`
 • \`get filter <name>\` - Show one specific filter
+• \`show filter <name>\` - Alias of \`get filter <name>\`
 • \`update filter <name> <field> <value>\` - Update a filter
 • \`update filter <name> sourcegroups add <group>\` - Add one source group
 • \`update filter <name> sourcegroups remove <group>\` - Remove one source group
+• \`update filter <name> forwardto add <number>\` - Add one forward number
+• \`update filter <name> forwardto remove <number>\` - Remove one forward number
 
 **Available filter fields:**
 • \`keywords\` - Keywords (JSON array or string)
@@ -545,6 +549,7 @@ class FilterService {
 • \`important\` - Mark as important (true/false)
 • \`archive\` - Archive (true/false)
 • \`active\` - Active status (true/false)
+• \`enabled\` - Alias of \`active\` (true/false)
 
 **Command examples:**
 \`get filter Urgent Messages\`
@@ -552,6 +557,8 @@ class FilterService {
 \`update filter Urgent Messages sourcegroups add "Gruppo C"\`
 \`update filter Urgent Messages sourcegroups remove "Gruppo A"\`
 \`update filter Urgent Messages timewindowseconds 120\`
+\`update filter Urgent Messages authors ["+393331112233"]\`
+\`update filter Urgent Messages messagetypes ["text","image"]\`
 \`update filter Urgent Messages forwardTo ["+393331112233","+393339998877"]\`
 \`update filter Urgent Messages forwardTo add "+393331112233"\`
 \`update filter Urgent Messages forwardTo remove "+393331112233"\`
@@ -559,6 +566,7 @@ class FilterService {
 \`update filter Urgent Messages keywordmatchmode AND\`
 \`update filter Urgent Messages priority urgent\`
 \`update filter Urgent Messages active false\`
+\`update filter Urgent Messages enabled true\`
 
 💡 **Tips:**
 - Use \`help filters\` for detailed filter information
@@ -583,15 +591,19 @@ class FilterService {
     const helpMessage = `🔧 **FILTER COMMANDS:**
 
 📋 **List filters:**
-\`list filters\` or \`show filters\`
+\`list filters\`
+\`show filters\` (alias)
 
 🔎 **Get one filter:**
-\`get filter <name>\` (or \`show filter <name>\`)
+\`get filter <name>\`
+\`show filter <name>\` (alias)
 
 📝 **Update filter:**
 \`update filter <name> <field> <value>\`
 \`update filter <name> sourcegroups add <group>\`
 \`update filter <name> sourcegroups remove <group>\`
+\`update filter <name> forwardto add <number>\`
+\`update filter <name> forwardto remove <number>\`
 
 **Available fields:**
 • \`keywords\` - Keywords (JSON array or string)
@@ -605,6 +617,7 @@ class FilterService {
 • \`important\` - Mark as important (true/false)
 • \`archive\` - Archive (true/false)
 • \`active\` - Active status (true/false)
+• \`enabled\` - Alias of \`active\` (true/false)
 
 **Examples:**
 \`get filter Urgent Messages\`
@@ -612,13 +625,16 @@ class FilterService {
 \`update filter Urgent Messages sourcegroups add "Gruppo C"\`
 \`update filter Urgent Messages sourcegroups remove "Gruppo A"\`
 \`update filter Urgent Messages timewindowseconds 120\`
+\`update filter Urgent Messages authors ["+393331112233"]\`
+\`update filter Urgent Messages messagetypes ["text","image"]\`
 \`update filter Urgent Messages forwardTo ["+393331112233","+393339998877"]\`
 \`update filter Urgent Messages forwardTo add "+393331112233"\`
 \`update filter Urgent Messages forwardTo remove "+393331112233"\`
 \`update filter Urgent Messages keywords ["urgent","emergency"]\`
 \`update filter Urgent Messages keywordmatchmode AND\`
 \`update filter Urgent Messages priority urgent\`
-\`update filter Urgent Messages active false\``;
+\`update filter Urgent Messages active false\`
+\`update filter Urgent Messages enabled true\``;
 
     if (whatsappWebService && whatsappWebService.isAuthenticated) {
       try {
@@ -914,7 +930,15 @@ class FilterService {
           break;
           
         case 'active':
-          updateData.enabled = value.toLowerCase() === 'true';
+        case 'enabled':
+          {
+            const normalizedValue = value.trim().toLowerCase();
+            // Tolleranza per il typo comune "fale" oltre a true/false
+            if (normalizedValue !== 'true' && normalizedValue !== 'false' && normalizedValue !== 'fale') {
+              return { success: false, message: `Value "${value}" is invalid. Use "true" or "false"` };
+            }
+            updateData.enabled = normalizedValue === 'true';
+          }
           break;
           
         case 'keywordmatchmode':
@@ -994,65 +1018,12 @@ const setupFilters = async () => {
         console.log(`📋 Caricati ${defaultFilters.length} filtri predefiniti dal file .env`);
       } catch (parseError) {
         console.error('❌ Errore nel parsing DEFAULT_FILTERS dal .env:', parseError.message);
-        console.log('🔄 Usando filtri predefiniti hardcoded...');
-        
-        // Fallback ai filtri hardcoded se il parsing fallisce
-        defaultFilters = [
-          {
-            name: 'Messaggi Urgenti',
-            description: 'Filtra messaggi con parole chiave urgenti',
-            keywords: ['urgente', 'emergenza', 'asap', 'subito'],
-            actions: {
-              markAsImportant: true,
-              setPriority: 'urgent',
-              addTags: ['urgente']
-            }
-          },
-          {
-            name: 'Messaggi di Lavoro',
-            description: 'Filtra messaggi durante orario lavorativo',
-            timeRange: {
-              start: '09:00',
-              end: '18:00',
-              days: [1, 2, 3, 4, 5] // Lun-Ven
-            },
-            actions: {
-              addTags: ['lavoro']
-            }
-          },
-          {
-            name: '',
-            description: 'Inoltra automaticamente tutti i messaggi ricevuti',
-            actions: {
-              addTags: ['inoltro-automatico']
-            }
-          }
-        ];
+        console.log('🔄 Nessun fallback hardcoded: defaultFilters vuoto');
+        defaultFilters = [];
       }
     } else {
-      console.log('⚠️ DEFAULT_FILTERS non configurato nel .env, usando filtri predefiniti hardcoded');
-      
-      // Filtri predefiniti hardcoded
-      defaultFilters = [
-        {
-          name: 'forward',
-          description: 'i nuovi messaggi  vengono inoltrati in un numero separato, con: sourceGroups è possibile specificare quali gruppi o numeri attenzionare',
-          authors: [],
-          sourceGroups: ['NLF Lì-gue'],
-          actions: {
-            addTags: ['Messagio non duplicato']
-          },
-          timeWindowSeconds: 10,
-          enabled: true,
-          uniqueText: {
-            enabled: true
-          },
-          actions: {
-            forwardTo: ['+393476835437'],
-          }
-
-        }
-      ];
+      console.log('⚠️ DEFAULT_FILTERS non configurato nel .env: defaultFilters vuoto');
+      defaultFilters = [];
     }
 
     // Crea i filtri se non esistono
