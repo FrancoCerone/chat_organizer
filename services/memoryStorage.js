@@ -5,6 +5,8 @@
 
 class MemoryStorage {
   constructor() {
+    const parsedMaxMessages = Number.parseInt(process.env.MEMORY_MAX_MESSAGES || '1000', 10);
+    this.maxMessages = Number.isNaN(parsedMaxMessages) || parsedMaxMessages < 1 ? 1000 : parsedMaxMessages;
     this.messages = new Map(); // messageId -> message
     this.filters = new Map(); // _id -> filter
     this.filterCounter = 0;
@@ -43,7 +45,21 @@ class MemoryStorage {
     };
 
     this.messages.set(messageId, message);
+    this.enforceMessagesFifoLimit();
     return this.createMessageProxy(message);
+  }
+
+  /**
+   * Mantiene il numero di messaggi entro il limite configurato (FIFO).
+   */
+  enforceMessagesFifoLimit() {
+    while (this.messages.size > this.maxMessages) {
+      const oldestMessageId = this.messages.keys().next().value;
+      if (!oldestMessageId) {
+        break;
+      }
+      this.messages.delete(oldestMessageId);
+    }
   }
 
   /**
@@ -335,6 +351,7 @@ class MemoryStorage {
   getStats() {
     return {
       messages: this.messages.size,
+      maxMessages: this.maxMessages,
       filters: this.filters.size,
       activeFilters: Array.from(this.filters.values()).filter(f => f.enabled).length
     };
