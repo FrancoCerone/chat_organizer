@@ -232,7 +232,7 @@ class WhatsappWebService {
 
     // Messaggio ricevuto
     this.client.on('message', async (message) => {
-      console.log(JSON.stringify(message))
+      console.log(this.formatIncomingMessageLog(message));
       await this.handleIncomingMessage(message);
     });
 
@@ -277,6 +277,24 @@ class WhatsappWebService {
     } catch (error) {
       console.error('❌ Errore nel recupero informazioni gruppi:', error);
     }
+  }
+
+  formatIncomingMessageLog(message) {
+    const type = message.type || '?';
+    const from = message.from || '';
+    const isGroup = from.includes('@g.us');
+    const chatId = from.replace(/@(g\.us|c\.us)$/, '');
+    const chatLabel = isGroup ? `gruppo ${chatId}` : `privato ${chatId}`;
+    const sender = message.fromMe
+      ? 'io'
+      : (message._data?.notifyName || message.author || '?').replace(/@(lid|c\.us|g\.us)$/, '');
+    const rawBody = (message.body || '').replace(/\s+/g, ' ').trim();
+    const preview = rawBody
+      ? (rawBody.length > 60 ? `${rawBody.slice(0, 57)}...` : rawBody)
+      : (message.hasMedia ? '[media]' : '[senza testo]');
+    const flags = [message.hasMedia && 'media', message.isForwarded && 'fwd'].filter(Boolean);
+    const flagsSuffix = flags.length ? ` [${flags.join(', ')}]` : '';
+    return `📩 ${type} | ${chatLabel} | ${sender}: ${preview}${flagsSuffix}`;
   }
 
   // Gestisce i messaggi in arrivo
@@ -354,8 +372,7 @@ class WhatsappWebService {
         message = new Message(normalizedMessage);
       }
       await message.save();
-      console.log('💾 Messaggio da gruppo salvato nel database');
-      
+
       // Controlla se è un comando admin
       const text = messageData.content.text ? messageData.content.text.toLowerCase().trim() : '';
       const isAdminCommand = text === 'help' || 
@@ -463,7 +480,6 @@ class WhatsappWebService {
       // Formatta il numero di telefono per WhatsApp
       const formattedNumber = cleanPhoneNumber.includes('@c.us') ? cleanPhoneNumber : `${cleanPhoneNumber}@c.us`;
       
-      console.log(`📤 Tentativo invio messaggio a: ${formattedNumber}`);
       await this.client.sendMessage(formattedNumber, message);
       console.log(`✅ Messaggio inviato al numero "${cleanPhoneNumber}"`);
       

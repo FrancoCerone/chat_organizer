@@ -334,14 +334,12 @@ class FilterService {
         // Se non ci sono numeri nell'environment, usa quelli dal filtro come fallback
         if (phonesToForward.length === 0) {
           phonesToForward = actions.forwardTo;
-          console.log('⚠️ FORWARD_TO_NUMBERS non configurato, uso numeri dal filtro');
         }
         
         // Inoltra ai numeri configurati
         for (const phone of phonesToForward) {
           try {
             await whatsappWebService.forwardText(message, phone, result.filterName);
-            console.log(`📤 Forwarded via WhatsApp Web to ${phone}`);
           } catch (fwdErr) {
             console.error('Error forwarding via WhatsApp Web:', fwdErr.message);
           }
