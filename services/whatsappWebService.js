@@ -467,6 +467,11 @@ class WhatsappWebService {
     }
   }
 
+  getFormattedChatId(phoneNumber) {
+    const cleanPhoneNumber = this.formatPhoneNumber(phoneNumber);
+    return cleanPhoneNumber.includes('@c.us') ? cleanPhoneNumber : `${cleanPhoneNumber}@c.us`;
+  }
+
   // Invia messaggio a un numero di telefono specifico
   async sendMessageToNumber(phoneNumber, message) {
     if (!this.isAuthenticated) {
@@ -474,19 +479,29 @@ class WhatsappWebService {
     }
 
     try {
-      // Formatta il numero di telefono usando la funzione dedicata
-      const cleanPhoneNumber = this.formatPhoneNumber(phoneNumber);
-      
-      // Formatta il numero di telefono per WhatsApp
-      const formattedNumber = cleanPhoneNumber.includes('@c.us') ? cleanPhoneNumber : `${cleanPhoneNumber}@c.us`;
-      
+      const formattedNumber = this.getFormattedChatId(phoneNumber);
       await this.client.sendMessage(formattedNumber, message);
-      console.log(`✅ Messaggio inviato al numero "${cleanPhoneNumber}"`);
-      
+      console.log(`✅ Messaggio inviato al numero "${this.formatPhoneNumber(phoneNumber)}"`);
     } catch (error) {
       console.error('❌ Errore invio messaggio al numero:', error);
       throw error;
     }
+  }
+
+  buildForwardMedia(originalMessage) {
+    const media = originalMessage.content?.media;
+    const base64Data = media?.data;
+    if (!base64Data) {
+      return null;
+    }
+
+    const mimeType = media.mimeType || media.mimetype;
+    if (!mimeType) {
+      return null;
+    }
+
+    const fileName = media.fileName || media.filename || undefined;
+    return new MessageMedia(mimeType, base64Data, fileName);
   }
 
   // Builder centralizzato per messaggi inoltrati (simile a whatsappService)
@@ -532,10 +547,37 @@ class WhatsappWebService {
     }
   }
 
-  // Inoltra messaggio a un numero specifico
+  // Inoltra messaggio a un numero specifico (testo + eventuale media)
   async forwardText(originalMessage, toPhoneNumber, filterName = null) {
+    if (!this.isAuthenticated) {
+      throw new Error('WhatsApp Web non autenticato');
+    }
+
     const messageBody = this.buildForwardMessage(originalMessage, filterName);
-    return this.sendMessageToNumber(toPhoneNumber, messageBody);
+    const media = this.buildForwardMedia(originalMessage);
+    const formattedNumber = this.getFormattedChatId(toPhoneNumber);
+    const CAPTION_LIMIT = 1024;
+
+    try {
+      if (media) {
+        const options = messageBody ? { caption: messageBody } : {};
+        if (messageBody && messageBody.length > CAPTION_LIMIT) {
+          options.caption = `${messageBody.slice(0, CAPTION_LIMIT - 3)}...`;
+          await this.client.sendMessage(formattedNumber, media, options);
+          await this.client.sendMessage(formattedNumber, messageBody);
+        } else {
+          await this.client.sendMessage(formattedNumber, media, options);
+        }
+        console.log(`✅ Messaggio con media inoltrato al numero "${this.formatPhoneNumber(toPhoneNumber)}"`);
+        return;
+      }
+
+      await this.client.sendMessage(formattedNumber, messageBody);
+      console.log(`✅ Messaggio inoltrato al numero "${this.formatPhoneNumber(toPhoneNumber)}"`);
+    } catch (error) {
+      console.error('❌ Errore inoltro messaggio:', error);
+      throw error;
+    }
   }
 
   // Invia messaggio nella chat separata con formattazione migliorata

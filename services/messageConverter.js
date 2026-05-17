@@ -39,8 +39,8 @@ class MessageConverter {
       if (message.hasMedia) {
         const media = await message.downloadMedia();
         messageData.content.media = {
-          mimetype: media.mimetype,
-          filename: media.filename,
+          mimeType: media.mimetype,
+          fileName: media.filename,
           data: media.data
         };
       }
@@ -99,7 +99,8 @@ class MessageConverter {
         content: {
           type: message.content?.type || 'text',
           text: message.content?.text || '',
-          timestamp: message.content?.timestamp || new Date(message.timestamp)
+          timestamp: message.content?.timestamp || new Date(message.timestamp),
+          ...(message.content?.media && { media: message.content.media })
         },
         timestamp: message.timestamp,
         metadata: {

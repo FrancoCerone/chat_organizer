@@ -43,7 +43,8 @@ const messageSchema = new mongoose.Schema({
       url: String,
       mimeType: String,
       fileName: String,
-      fileSize: Number
+      fileSize: Number,
+      data: String // base64 per inoltro media (whatsapp-web.js)
     },
     location: {
       latitude: Number,
