@@ -37,10 +37,11 @@ class MemoryStorage {
       updatedAt: new Date(),
       status: data.status || 'received',
       metadata: {
-        isImportant: data.metadata?.isImportant || false,
-        priority: data.metadata?.priority || 'medium',
-        tags: data.metadata?.tags || [],
-        notes: data.metadata?.notes || ''
+        ...data.metadata,
+        isImportant: data.metadata?.isImportant ?? false,
+        priority: data.metadata?.priority ?? 'medium',
+        tags: data.metadata?.tags ?? [],
+        notes: data.metadata?.notes ?? ''
       }
     };
 
